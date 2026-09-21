@@ -1,50 +1,76 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+const STORE_API_URL =
+  "http://127.0.0.1:8000/snowflake/stores?limit=1000";
 
 function Stores() {
-
+  const [stores, setStores] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  // Temporary frontend data
-  // Backend store API can be connected later.
-  const stores = [
-    {
-      id: 1,
-      name: "Store A",
-      location: "Solapur",
-      status: "Active",
-      visitors: "--"
-    },
-    {
-      id: 2,
-      name: "Store B",
-      location: "Pune",
-      status: "Active",
-      visitors: "--"
-    },
-    {
-      id: 3,
-      name: "Store C",
-      location: "Mumbai",
-      status: "Active",
-      visitors: "--"
-    },
-    {
-      id: 4,
-      name: "Store D",
-      location: "Kolhapur",
-      status: "Inactive",
-      visitors: "--"
+  // Fetch stores from backend
+  const fetchStores = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await fetch(STORE_API_URL);
+
+      if (!response.ok) {
+        throw new Error(
+          `Store API request failed with status ${response.status}`
+        );
+      }
+
+      const data = await response.json();
+
+      // Backend response:
+      // {
+      //   status: "success",
+      //   source: "snowflake",
+      //   count: 0,
+      //   stores: [...]
+      // }
+
+      if (!Array.isArray(data.stores)) {
+        throw new Error(
+          "Invalid Store API response: stores array not found."
+        );
+      }
+
+      setStores(data.stores);
+    } catch (err) {
+      console.error("Store API Error:", err);
+
+      setError(
+        "Unable to load store data from the backend."
+      );
+
+      setStores([]);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
-  const filteredStores = stores.filter((store) =>
-    store.name
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase()) ||
-    store.location
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase())
-  );
+  // Load stores when page opens
+  useEffect(() => {
+    fetchStores();
+  }, []);
+
+  // Frontend search
+  const filteredStores = stores.filter((store) => {
+    const search = searchTerm.toLowerCase();
+
+    return (
+      String(store.store_id || "")
+        .toLowerCase()
+        .includes(search) ||
+      String(store.store_name || "")
+        .toLowerCase()
+        .includes(search)
+    );
+  });
 
   return (
     <div className="stores-page">
@@ -54,18 +80,20 @@ function Stores() {
       <div className="page-intro">
 
         <div>
-
           <h2>Stores</h2>
 
           <p>
-            Manage and explore retail store locations
-            monitored by GeoPulse.
+            Explore retail store locations monitored by
+            GeoPulse.
           </p>
-
         </div>
 
-        <button className="map-button">
-          + Add Store
+        <button
+          className="map-button"
+          onClick={fetchStores}
+          disabled={loading}
+        >
+          {loading ? "Loading..." : "Refresh Stores"}
         </button>
 
       </div>
@@ -82,36 +110,11 @@ function Stores() {
           </span>
 
           <div>
-
             <p>Total Stores</p>
 
             <h3>
-              {stores.length}
+              {loading ? "--" : stores.length}
             </h3>
-
-          </div>
-
-        </div>
-
-
-        <div className="mobility-stat-card">
-
-          <span className="mobility-stat-icon">
-            ✓
-          </span>
-
-          <div>
-
-            <p>Active Stores</p>
-
-            <h3>
-              {
-                stores.filter(
-                  (store) => store.status === "Active"
-                ).length
-              }
-            </h3>
-
           </div>
 
         </div>
@@ -124,13 +127,38 @@ function Stores() {
           </span>
 
           <div>
-
-            <p>Tracked Visitors</p>
+            <p>Displayed Stores</p>
 
             <h3>
-              --
+              {loading ? "--" : filteredStores.length}
             </h3>
+          </div>
 
+        </div>
+
+
+        <div className="mobility-stat-card">
+
+          <span className="mobility-stat-icon">
+            ⌖
+          </span>
+
+          <div>
+            <p>Mapped Locations</p>
+
+            <h3>
+              {loading
+                ? "--"
+                : stores.filter(
+                    (store) =>
+                      Number.isFinite(
+                        Number(store.latitude)
+                      ) &&
+                      Number.isFinite(
+                        Number(store.longitude)
+                      )
+                  ).length}
+            </h3>
           </div>
 
         </div>
@@ -143,13 +171,9 @@ function Stores() {
           </span>
 
           <div>
+            <p>Store Analytics</p>
 
-            <p>High Traffic Stores</p>
-
-            <h3>
-              --
-            </h3>
-
+            <h3>--</h3>
           </div>
 
         </div>
@@ -164,15 +188,14 @@ function Stores() {
         <div className="stores-card-header">
 
           <div>
-
             <h3>
               Store Locations
             </h3>
 
             <p>
-              Retail locations monitored by GeoPulse
+              Retail locations received from the backend
+              Store API.
             </p>
-
           </div>
 
 
@@ -191,120 +214,212 @@ function Stores() {
         </div>
 
 
+        {/* Loading State */}
+
+        {loading && (
+
+          <div
+            style={{
+              padding: "50px",
+              textAlign: "center"
+            }}
+          >
+            <h3>
+              Loading Stores...
+            </h3>
+
+            <p>
+              Fetching store data from the backend.
+            </p>
+          </div>
+
+        )}
+
+
+        {/* Error State */}
+
+        {!loading && error && (
+
+          <div
+            style={{
+              margin: "20px",
+              padding: "18px",
+              borderRadius: "8px",
+              background: "#fff1f2",
+              border: "1px solid #fecdd3",
+              color: "#be123c"
+            }}
+          >
+
+            <strong>
+              Store API Error
+            </strong>
+
+            <p style={{ marginTop: "6px" }}>
+              {error}
+            </p>
+
+            <button
+              className="store-view-button"
+              onClick={fetchStores}
+            >
+              Try Again
+            </button>
+
+          </div>
+
+        )}
+
+
+        {/* Empty State */}
+
+        {!loading &&
+          !error &&
+          stores.length === 0 && (
+
+            <div
+              style={{
+                padding: "50px",
+                textAlign: "center"
+              }}
+            >
+
+              <h3>
+                No Stores Found
+              </h3>
+
+              <p>
+                No store data is currently available
+                from the backend.
+              </p>
+
+            </div>
+
+          )}
+
+
+        {/* Search Empty State */}
+
+        {!loading &&
+          !error &&
+          stores.length > 0 &&
+          filteredStores.length === 0 && (
+
+            <div
+              style={{
+                padding: "50px",
+                textAlign: "center"
+              }}
+            >
+
+              <h3>
+                No Matching Stores
+              </h3>
+
+              <p>
+                No stores match "{searchTerm}".
+              </p>
+
+            </div>
+
+          )}
+
+
         {/* Store Table */}
 
-        <div className="stores-table-container">
+        {!loading &&
+          !error &&
+          filteredStores.length > 0 && (
 
-          <table className="stores-table">
+            <div className="stores-table-container">
 
-            <thead>
+              <table className="stores-table">
 
-              <tr>
+                <thead>
 
-                <th>
-                  Store
-                </th>
+                  <tr>
 
-                <th>
-                  Location
-                </th>
+                    <th>
+                      Store ID
+                    </th>
 
-                <th>
-                  Status
-                </th>
+                    <th>
+                      Store Name
+                    </th>
 
-                <th>
-                  Visitors
-                </th>
+                    <th>
+                      Latitude
+                    </th>
 
-                <th>
-                  Action
-                </th>
+                    <th>
+                      Longitude
+                    </th>
 
-              </tr>
+                    <th>
+                      Action
+                    </th>
 
-            </thead>
+                  </tr>
 
-
-            <tbody>
-
-              {filteredStores.map((store) => (
-
-                <tr key={store.id}>
-
-                  <td>
-
-                    <strong>
-                      {store.name}
-                    </strong>
-
-                  </td>
+                </thead>
 
 
-                  <td>
-                    {store.location}
-                  </td>
+                <tbody>
 
+                  {filteredStores.map((store) => (
 
-                  <td>
-
-                    <span
-                      className={
-                        store.status === "Active"
-                          ? "store-status active"
-                          : "store-status inactive"
-                      }
+                    <tr
+                      key={store.store_id}
                     >
 
-                      {store.status}
-
-                    </span>
-
-                  </td>
-
-
-                  <td>
-                    {store.visitors}
-                  </td>
+                      <td>
+                        <strong>
+                          {store.store_id}
+                        </strong>
+                      </td>
 
 
-                  <td>
-
-                    <button
-                      className="store-view-button"
-                    >
-                      View
-                    </button>
-
-                  </td>
-
-                </tr>
-
-              ))}
+                      <td>
+                        {store.store_name}
+                      </td>
 
 
-              {filteredStores.length === 0 && (
+                      <td>
+                        {store.latitude}
+                      </td>
 
-                <tr>
 
-                  <td
-                    colSpan="5"
-                    className="no-stores"
-                  >
+                      <td>
+                        {store.longitude}
+                      </td>
 
-                    No stores found.
 
-                  </td>
+                      <td>
 
-                </tr>
+                        <button
+                          className="store-view-button"
+                          onClick={() => {
+                            alert(
+                              `Store: ${store.store_name}\nStore ID: ${store.store_id}\nLatitude: ${store.latitude}\nLongitude: ${store.longitude}`
+                            );
+                          }}
+                        >
+                          View
+                        </button>
 
-              )}
+                      </td>
 
-            </tbody>
+                    </tr>
 
-          </table>
+                  ))}
 
-        </div>
+                </tbody>
+
+              </table>
+
+            </div>
+
+          )}
 
       </div>
 
