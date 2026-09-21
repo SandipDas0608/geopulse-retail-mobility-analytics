@@ -1308,3 +1308,95 @@
   }
 
 }
+/* ================================= */
+/* DAY 13 - MAP SEARCH */
+/* ================================= */
+
+.map-search-group {
+  flex: 1;
+  min-width: 280px;
+}
+
+.map-search-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-search-box input {
+  min-width: 240px;
+  flex: 1;
+}
+
+.map-search-button {
+  height: 38px;
+  padding: 0 15px;
+  border: none;
+  border-radius: 7px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.map-search-button:hover {
+  background: #1d4ed8;
+}
+
+.map-search-clear {
+  width: 32px;
+  height: 38px;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #6b7280;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.map-search-clear:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.map-search-message {
+  margin: 12px 20px 0;
+  padding: 10px 13px;
+  border-radius: 7px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+
+/* Responsive */
+
+@media (max-width: 700px) {
+
+  .map-search-group {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .map-search-box {
+    width: 100%;
+  }
+
+  .map-search-box input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .map-search-button {
+    flex-shrink: 0;
+  }
+
+  .map-search-clear {
+    flex-shrink: 0;
+  }
+
+}

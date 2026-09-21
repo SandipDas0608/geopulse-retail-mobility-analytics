@@ -1,4 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useRef
+} from "react";
 
 import {
   MapContainer,
@@ -37,18 +42,32 @@ const API_URL =
 
 
 // Automatically fit the map to visible points
-function MapBounds({ points }) {
+function MapBounds({ points, skipFit }) {
 
   const map = useMap();
 
   useEffect(() => {
 
-    if (!points || points.length === 0) {
+    if (
+      skipFit ||
+      !points ||
+      points.length === 0
+    ) {
+      return;
+    }
+
+    const validPoints = points.filter(
+      (point) =>
+        Number.isFinite(Number(point.latitude)) &&
+        Number.isFinite(Number(point.longitude))
+    );
+
+    if (validPoints.length === 0) {
       return;
     }
 
     const bounds = L.latLngBounds(
-      points.map((point) => [
+      validPoints.map((point) => [
         Number(point.latitude),
         Number(point.longitude)
       ])
@@ -58,7 +77,66 @@ function MapBounds({ points }) {
       padding: [40, 40]
     });
 
-  }, [points, map]);
+  }, [points, map, skipFit]);
+
+  return null;
+}
+
+
+// Move map to searched point
+function MapSearchController({
+  selectedPoint,
+  selectedMarkerRef
+}) {
+
+  const map = useMap();
+
+  useEffect(() => {
+
+    if (!selectedPoint) {
+      return;
+    }
+
+    const latitude =
+      Number(selectedPoint.latitude);
+
+    const longitude =
+      Number(selectedPoint.longitude);
+
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude)
+    ) {
+      return;
+    }
+
+    map.flyTo(
+      [latitude, longitude],
+      17,
+      {
+        duration: 1.2
+      }
+    );
+
+    // Open popup after map movement
+    const timer = setTimeout(() => {
+
+      if (
+        selectedMarkerRef &&
+        selectedMarkerRef.current
+      ) {
+        selectedMarkerRef.current.openPopup();
+      }
+
+    }, 1300);
+
+    return () => clearTimeout(timer);
+
+  }, [
+    selectedPoint,
+    map,
+    selectedMarkerRef
+  ]);
 
   return null;
 }
@@ -68,14 +146,33 @@ function MobilityMap() {
 
   const [points, setPoints] = useState([]);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [error, setError] = useState("");
+  const [error, setError] =
+    useState("");
 
-  // Filter state
-  const [timeFilter, setTimeFilter] = useState("all");
 
-  const [deviceSearch, setDeviceSearch] = useState("");
+  // Day 12 filters
+  const [timeFilter, setTimeFilter] =
+    useState("all");
+
+  const [deviceSearch, setDeviceSearch] =
+    useState("");
+
+
+  // Day 13 map search
+  const [mapSearch, setMapSearch] =
+    useState("");
+
+  const [selectedPoint, setSelectedPoint] =
+    useState(null);
+
+  const [searchMessage, setSearchMessage] =
+    useState("");
+
+  const selectedMarkerRef =
+    useRef(null);
 
 
   // Fetch mobility data
@@ -87,7 +184,8 @@ function MobilityMap() {
 
       setError("");
 
-      const response = await fetch(API_URL);
+      const response =
+        await fetch(API_URL);
 
 
       if (!response.ok) {
@@ -99,7 +197,8 @@ function MobilityMap() {
       }
 
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
 
       if (!Array.isArray(data.points)) {
@@ -144,41 +243,54 @@ function MobilityMap() {
 
 
   /*
-   * Apply filters to the real backend data.
+   * Apply Day 12 filters
+   * to the real backend data.
    */
   const filteredPoints = useMemo(() => {
 
     let result = [...points];
 
 
-    // Device ID search
-    if (deviceSearch.trim() !== "") {
+    // Device ID filter
+    if (
+      deviceSearch.trim() !== ""
+    ) {
 
       const search =
         deviceSearch
           .trim()
           .toLowerCase();
 
-      result = result.filter((point) =>
-        String(point.device_id || "")
-          .toLowerCase()
-          .includes(search)
+      result = result.filter(
+        (point) =>
+          String(
+            point.device_id || ""
+          )
+            .toLowerCase()
+            .includes(search)
       );
 
     }
 
 
     // Time filter
-    if (timeFilter !== "all") {
+    if (
+      timeFilter !== "all"
+    ) {
 
-      const now = new Date();
+      const now =
+        new Date();
 
-      let startTime = null;
+      let startTime =
+        null;
 
 
-      if (timeFilter === "today") {
+      if (
+        timeFilter === "today"
+      ) {
 
-        startTime = new Date();
+        startTime =
+          new Date();
 
         startTime.setHours(
           0,
@@ -190,23 +302,34 @@ function MobilityMap() {
       }
 
 
-      if (timeFilter === "24h") {
+      if (
+        timeFilter === "24h"
+      ) {
 
         startTime =
           new Date(
             now.getTime() -
-            24 * 60 * 60 * 1000
+            24 *
+              60 *
+              60 *
+              1000
           );
 
       }
 
 
-      if (timeFilter === "7d") {
+      if (
+        timeFilter === "7d"
+      ) {
 
         startTime =
           new Date(
             now.getTime() -
-            7 * 24 * 60 * 60 * 1000
+            7 *
+              24 *
+              60 *
+              60 *
+              1000
           );
 
       }
@@ -214,21 +337,31 @@ function MobilityMap() {
 
       if (startTime) {
 
-        result = result.filter((point) => {
+        result =
+          result.filter(
+            (point) => {
 
-          if (!point.timestamp) {
-            return false;
-          }
+              if (
+                !point.timestamp
+              ) {
+                return false;
+              }
 
-          const pointDate =
-            new Date(point.timestamp);
+              const pointDate =
+                new Date(
+                  point.timestamp
+                );
 
-          return (
-            !Number.isNaN(pointDate.getTime()) &&
-            pointDate >= startTime
+              return (
+                !Number.isNaN(
+                  pointDate.getTime()
+                ) &&
+                pointDate >=
+                  startTime
+              );
+
+            }
           );
-
-        });
 
       }
 
@@ -244,12 +377,114 @@ function MobilityMap() {
   ]);
 
 
+  // Day 13 - Map Search
+  const handleMapSearch = () => {
+
+    const search =
+      mapSearch
+        .trim()
+        .toLowerCase();
+
+
+    if (!search) {
+
+      setSelectedPoint(null);
+
+      setSearchMessage(
+        "Enter a Device ID, latitude, or longitude."
+      );
+
+      return;
+
+    }
+
+
+    /*
+     * Search through the currently
+     * filtered real mobility points.
+     */
+    const foundPoint =
+      filteredPoints.find(
+        (point) => {
+
+          const deviceId =
+            String(
+              point.device_id || ""
+            ).toLowerCase();
+
+
+          const latitude =
+            String(
+              point.latitude ?? ""
+            ).toLowerCase();
+
+
+          const longitude =
+            String(
+              point.longitude ?? ""
+            ).toLowerCase();
+
+
+          return (
+            deviceId.includes(search) ||
+            latitude.includes(search) ||
+            longitude.includes(search)
+          );
+
+        }
+      );
+
+
+    if (!foundPoint) {
+
+      setSelectedPoint(null);
+
+      setSearchMessage(
+        "No matching mobility point found. Try another search."
+      );
+
+      return;
+
+    }
+
+
+    setSelectedPoint(
+      foundPoint
+    );
+
+    setSearchMessage(
+      `Location found for Device ID: ${
+        foundPoint.device_id || "N/A"
+      }`
+    );
+
+  };
+
+
+  // Clear Day 13 map search
+  const clearMapSearch = () => {
+
+    setMapSearch("");
+
+    setSelectedPoint(null);
+
+    setSearchMessage("");
+
+  };
+
+
   // First visible point becomes map center
   const mapCenter =
     filteredPoints.length > 0
       ? [
-          Number(filteredPoints[0].latitude),
-          Number(filteredPoints[0].longitude)
+          Number(
+            filteredPoints[0]
+              .latitude
+          ),
+          Number(
+            filteredPoints[0]
+              .longitude
+          )
         ]
       : null;
 
@@ -279,7 +514,9 @@ function MobilityMap() {
 
         <button
           className="map-button"
-          onClick={fetchMobilityPoints}
+          onClick={
+            fetchMobilityPoints
+          }
           disabled={loading}
         >
 
@@ -432,6 +669,8 @@ function MobilityMap() {
         <div className="map-filters">
 
 
+          {/* Time Filter */}
+
           <div className="filter-group">
 
             <label>
@@ -468,6 +707,8 @@ function MobilityMap() {
           </div>
 
 
+          {/* Device Filter */}
+
           <div className="filter-group">
 
             <label>
@@ -488,13 +729,85 @@ function MobilityMap() {
           </div>
 
 
+          {/* Day 13 Map Search */}
+
+          <div className="filter-group map-search-group">
+
+            <label>
+              Map Search
+            </label>
+
+            <div className="map-search-box">
+
+              <input
+                type="text"
+                placeholder="Device ID / Latitude / Longitude"
+                value={mapSearch}
+                onChange={(event) => {
+
+                  setMapSearch(
+                    event.target.value
+                  );
+
+                  setSearchMessage("");
+
+                }}
+                onKeyDown={(event) => {
+
+                  if (
+                    event.key === "Enter"
+                  ) {
+
+                    handleMapSearch();
+
+                  }
+
+                }}
+              />
+
+
+              <button
+                className="map-search-button"
+                onClick={
+                  handleMapSearch
+                }
+              >
+                Search
+              </button>
+
+
+              {mapSearch && (
+
+                <button
+                  className="map-search-clear"
+                  onClick={
+                    clearMapSearch
+                  }
+                  title="Clear Search"
+                >
+                  ×
+                </button>
+
+              )}
+
+            </div>
+
+          </div>
+
+
+          {/* Reset Filters */}
+
           <button
             className="filter-reset-button"
             onClick={() => {
 
-              setTimeFilter("all");
+              setTimeFilter(
+                "all"
+              );
 
               setDeviceSearch("");
+
+              clearMapSearch();
 
             }}
           >
@@ -503,6 +816,19 @@ function MobilityMap() {
 
 
         </div>
+
+
+        {/* Search Result Message */}
+
+        {searchMessage && (
+
+          <div className="map-search-message">
+
+            {searchMessage}
+
+          </div>
+
+        )}
 
 
         {/* API Error */}
@@ -553,7 +879,11 @@ function MobilityMap() {
               }}
             >
 
-              <div style={{ textAlign: "center" }}>
+              <div
+                style={{
+                  textAlign: "center"
+                }}
+              >
 
                 <h3>
                   Loading Mobility Data...
@@ -588,7 +918,11 @@ function MobilityMap() {
                 }}
               >
 
-                <div style={{ textAlign: "center" }}>
+                <div
+                  style={{
+                    textAlign: "center"
+                  }}
+                >
 
                   <h3>
                     No Matching Mobility Points
@@ -622,7 +956,11 @@ function MobilityMap() {
                 }}
               >
 
-                <div style={{ textAlign: "center" }}>
+                <div
+                  style={{
+                    textAlign: "center"
+                  }}
+                >
 
                   <h3>
                     No Mobility Points Found
@@ -659,73 +997,117 @@ function MobilityMap() {
                 />
 
 
+                {/* Automatically fit filtered points */}
+
                 <MapBounds
-                  points={filteredPoints}
+                  points={
+                    filteredPoints
+                  }
+                  skipFit={
+                    selectedPoint !== null
+                  }
                 />
 
 
-                {/* Filtered GPS Points */}
+                {/* Day 13 map navigation */}
+
+                <MapSearchController
+                  selectedPoint={
+                    selectedPoint
+                  }
+                  selectedMarkerRef={
+                    selectedMarkerRef
+                  }
+                />
+
+
+                {/* GPS Points */}
 
                 {filteredPoints.map(
-                  (point, index) => (
+                  (
+                    point,
+                    index
+                  ) => {
 
-                    <Marker
-                      key={
-                        `${point.device_id}-${point.timestamp}-${index}`
-                      }
-                      position={[
-                        Number(point.latitude),
-                        Number(point.longitude)
-                      ]}
-                    >
+                    const isSelected =
+                      selectedPoint &&
+                      selectedPoint.device_id ===
+                        point.device_id &&
+                      selectedPoint.timestamp ===
+                        point.timestamp;
 
-                      <Popup>
 
-                        <strong>
-                          Mobility Point
-                        </strong>
+                    return (
 
-                        <br />
+                      <Marker
+                        key={
+                          `${point.device_id}-${point.timestamp}-${index}`
+                        }
+                        position={[
+                          Number(
+                            point.latitude
+                          ),
+                          Number(
+                            point.longitude
+                          )
+                        ]}
+                        ref={
+                          isSelected
+                            ? selectedMarkerRef
+                            : null
+                        }
+                      >
 
-                        <strong>
-                          Device ID:
-                        </strong>{" "}
+                        <Popup>
 
-                        {point.device_id || "N/A"}
+                          <strong>
+                            Mobility Point
+                          </strong>
 
-                        <br />
+                          <br />
 
-                        <strong>
-                          Latitude:
-                        </strong>{" "}
+                          <strong>
+                            Device ID:
+                          </strong>{" "}
 
-                        {point.latitude}
+                          {point.device_id ||
+                            "N/A"}
 
-                        <br />
+                          <br />
 
-                        <strong>
-                          Longitude:
-                        </strong>{" "}
+                          <strong>
+                            Latitude:
+                          </strong>{" "}
 
-                        {point.longitude}
+                          {point.latitude}
 
-                        <br />
+                          <br />
 
-                        <strong>
-                          Timestamp:
-                        </strong>{" "}
+                          <strong>
+                            Longitude:
+                          </strong>{" "}
 
-                        {point.timestamp
-                          ? new Date(
-                              point.timestamp
-                            ).toLocaleString()
-                          : "N/A"}
+                          {point.longitude}
 
-                      </Popup>
+                          <br />
 
-                    </Marker>
+                          <strong>
+                            Timestamp:
+                          </strong>{" "}
 
-                  )
+                          {point.timestamp
+                            ? new Date(
+                                point.timestamp
+                              ).toLocaleString()
+                            : "N/A"}
+
+                        </Popup>
+
+                      </Marker>
+
+                    );
+
+                  }
                 )}
 
               </MapContainer>
