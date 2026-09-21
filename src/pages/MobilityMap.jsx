@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   MapContainer,
@@ -28,12 +28,15 @@ L.Icon.Default.mergeOptions({
 });
 
 
-// Backend API
+// Keep the current backend URL for now.
+// We will move this to one API configuration file
+// when your friend provides the public backend URL.
+
 const API_URL =
   "http://127.0.0.1:8000/mobility/points?limit=1000";
 
 
-// Automatically fit map to real GPS points
+// Automatically fit the map to visible points
 function MapBounds({ points }) {
 
   const map = useMap();
@@ -69,8 +72,13 @@ function MobilityMap() {
 
   const [error, setError] = useState("");
 
+  // Filter state
+  const [timeFilter, setTimeFilter] = useState("all");
 
-  // Fetch real mobility data
+  const [deviceSearch, setDeviceSearch] = useState("");
+
+
+  // Fetch mobility data
   const fetchMobilityPoints = async () => {
 
     try {
@@ -78,7 +86,6 @@ function MobilityMap() {
       setLoading(true);
 
       setError("");
-
 
       const response = await fetch(API_URL);
 
@@ -95,32 +102,16 @@ function MobilityMap() {
       const data = await response.json();
 
 
-      // Backend response:
-      // {
-      //   status: "success",
-      //   count: 5,
-      //   points: [...]
-      // }
-
       if (!Array.isArray(data.points)) {
 
         throw new Error(
-          "Invalid mobility API response: points array not found."
+          "Invalid mobility API response."
         );
 
       }
 
 
-      // Keep only valid GPS points
-      const validPoints = data.points.filter(
-        (point) =>
-          point &&
-          Number.isFinite(Number(point.latitude)) &&
-          Number.isFinite(Number(point.longitude))
-      );
-
-
-      setPoints(validPoints);
+      setPoints(data.points);
 
     } catch (err) {
 
@@ -144,7 +135,7 @@ function MobilityMap() {
   };
 
 
-  // Load mobility points when page opens
+  // Load data when page opens
   useEffect(() => {
 
     fetchMobilityPoints();
@@ -152,18 +143,121 @@ function MobilityMap() {
   }, []);
 
 
-  // Use first real GPS point as initial map center
+  /*
+   * Apply filters to the real backend data.
+   */
+  const filteredPoints = useMemo(() => {
+
+    let result = [...points];
+
+
+    // Device ID search
+    if (deviceSearch.trim() !== "") {
+
+      const search =
+        deviceSearch
+          .trim()
+          .toLowerCase();
+
+      result = result.filter((point) =>
+        String(point.device_id || "")
+          .toLowerCase()
+          .includes(search)
+      );
+
+    }
+
+
+    // Time filter
+    if (timeFilter !== "all") {
+
+      const now = new Date();
+
+      let startTime = null;
+
+
+      if (timeFilter === "today") {
+
+        startTime = new Date();
+
+        startTime.setHours(
+          0,
+          0,
+          0,
+          0
+        );
+
+      }
+
+
+      if (timeFilter === "24h") {
+
+        startTime =
+          new Date(
+            now.getTime() -
+            24 * 60 * 60 * 1000
+          );
+
+      }
+
+
+      if (timeFilter === "7d") {
+
+        startTime =
+          new Date(
+            now.getTime() -
+            7 * 24 * 60 * 60 * 1000
+          );
+
+      }
+
+
+      if (startTime) {
+
+        result = result.filter((point) => {
+
+          if (!point.timestamp) {
+            return false;
+          }
+
+          const pointDate =
+            new Date(point.timestamp);
+
+          return (
+            !Number.isNaN(pointDate.getTime()) &&
+            pointDate >= startTime
+          );
+
+        });
+
+      }
+
+    }
+
+
+    return result;
+
+  }, [
+    points,
+    timeFilter,
+    deviceSearch
+  ]);
+
+
+  // First visible point becomes map center
   const mapCenter =
-    points.length > 0
+    filteredPoints.length > 0
       ? [
-          Number(points[0].latitude),
-          Number(points[0].longitude)
+          Number(filteredPoints[0].latitude),
+          Number(filteredPoints[0].longitude)
         ]
       : null;
 
 
   return (
+
     <div className="mobility-page">
+
 
       {/* Page Introduction */}
 
@@ -171,11 +265,13 @@ function MobilityMap() {
 
         <div>
 
-          <h2>Mobility Map</h2>
+          <h2>
+            Mobility Map
+          </h2>
 
           <p>
-            Explore hyper-local mobility patterns, foot traffic,
-            and high-traffic retail zones.
+            Explore hyper-local mobility patterns,
+            foot traffic, and high-traffic retail zones.
           </p>
 
         </div>
@@ -187,7 +283,9 @@ function MobilityMap() {
           disabled={loading}
         >
 
-          {loading ? "Loading..." : "Refresh Map"}
+          {loading
+            ? "Loading..."
+            : "Refresh Map"}
 
         </button>
 
@@ -198,6 +296,7 @@ function MobilityMap() {
 
       <div className="mobility-stats">
 
+
         <div className="mobility-stat-card">
 
           <span className="mobility-stat-icon">
@@ -206,10 +305,16 @@ function MobilityMap() {
 
           <div>
 
-            <p>Total GPS Pings</p>
+            <p>
+              Total GPS Pings
+            </p>
 
             <h3>
-              {loading ? "--" : points.length}
+
+              {loading
+                ? "--"
+                : points.length}
+
             </h3>
 
           </div>
@@ -225,10 +330,16 @@ function MobilityMap() {
 
           <div>
 
-            <p>Active Zones</p>
+            <p>
+              Visible Points
+            </p>
 
             <h3>
-              --
+
+              {loading
+                ? "--"
+                : filteredPoints.length}
+
             </h3>
 
           </div>
@@ -244,7 +355,9 @@ function MobilityMap() {
 
           <div>
 
-            <p>High Traffic Zones</p>
+            <p>
+              Active Zones
+            </p>
 
             <h3>
               --
@@ -263,7 +376,9 @@ function MobilityMap() {
 
           <div>
 
-            <p>Nearby Stores</p>
+            <p>
+              Nearby Stores
+            </p>
 
             <h3>
               --
@@ -280,6 +395,7 @@ function MobilityMap() {
 
       <div className="map-card">
 
+
         <div className="map-card-header">
 
           <div>
@@ -289,8 +405,8 @@ function MobilityMap() {
             </h3>
 
             <p>
-              Interactive visualization of mobility activity
-              and retail locations
+              Interactive visualization of mobility
+              activity and retail locations
             </p>
 
           </div>
@@ -307,6 +423,84 @@ function MobilityMap() {
               : "Live Map"}
 
           </div>
+
+        </div>
+
+
+        {/* Filters */}
+
+        <div className="map-filters">
+
+
+          <div className="filter-group">
+
+            <label>
+              Time Range
+            </label>
+
+            <select
+              value={timeFilter}
+              onChange={(event) =>
+                setTimeFilter(
+                  event.target.value
+                )
+              }
+            >
+
+              <option value="all">
+                All Points
+              </option>
+
+              <option value="today">
+                Today
+              </option>
+
+              <option value="24h">
+                Last 24 Hours
+              </option>
+
+              <option value="7d">
+                Last 7 Days
+              </option>
+
+            </select>
+
+          </div>
+
+
+          <div className="filter-group">
+
+            <label>
+              Device ID
+            </label>
+
+            <input
+              type="text"
+              placeholder="Search device..."
+              value={deviceSearch}
+              onChange={(event) =>
+                setDeviceSearch(
+                  event.target.value
+                )
+              }
+            />
+
+          </div>
+
+
+          <button
+            className="filter-reset-button"
+            onClick={() => {
+
+              setTimeFilter("all");
+
+              setDeviceSearch("");
+
+            }}
+          >
+            Reset Filters
+          </button>
+
 
         </div>
 
@@ -330,7 +524,7 @@ function MobilityMap() {
               Mobility API Error
             </strong>
 
-            <p style={{ marginTop: "5px" }}>
+            <p>
               {error}
             </p>
 
@@ -343,7 +537,8 @@ function MobilityMap() {
 
         <div className="mobility-map">
 
-          {/* Loading State */}
+
+          {/* Loading */}
 
           {loading && (
 
@@ -375,7 +570,42 @@ function MobilityMap() {
           )}
 
 
-          {/* Empty State */}
+          {/* No filtered results */}
+
+          {!loading &&
+            !error &&
+            points.length > 0 &&
+            filteredPoints.length === 0 && (
+
+              <div
+                style={{
+                  height: "100%",
+                  minHeight: "500px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "#f8fafc"
+                }}
+              >
+
+                <div style={{ textAlign: "center" }}>
+
+                  <h3>
+                    No Matching Mobility Points
+                  </h3>
+
+                  <p>
+                    Try changing the filters.
+                  </p>
+
+                </div>
+
+              </div>
+
+            )}
+
+
+          {/* No backend data */}
 
           {!loading &&
             !error &&
@@ -409,11 +639,11 @@ function MobilityMap() {
             )}
 
 
-          {/* Real Leaflet Map */}
+          {/* Leaflet Map */}
 
           {!loading &&
             !error &&
-            points.length > 0 &&
+            filteredPoints.length > 0 &&
             mapCenter && (
 
               <MapContainer
@@ -429,71 +659,74 @@ function MobilityMap() {
                 />
 
 
-                {/* Automatically fit all GPS points */}
-
                 <MapBounds
-                  points={points}
+                  points={filteredPoints}
                 />
 
 
-                {/* Real Backend GPS Points */}
+                {/* Filtered GPS Points */}
 
-                {points.map((point, index) => (
+                {filteredPoints.map(
+                  (point, index) => (
 
-                  <Marker
-                    key={
-                      `${point.device_id}-${point.timestamp}-${index}`
-                    }
-                    position={[
-                      Number(point.latitude),
-                      Number(point.longitude)
-                    ]}
-                  >
+                    <Marker
+                      key={
+                        `${point.device_id}-${point.timestamp}-${index}`
+                      }
+                      position={[
+                        Number(point.latitude),
+                        Number(point.longitude)
+                      ]}
+                    >
 
-                    <Popup>
+                      <Popup>
 
-                      <strong>
-                        Mobility Point
-                      </strong>
+                        <strong>
+                          Mobility Point
+                        </strong>
 
-                      <br />
+                        <br />
 
-                      <strong>
-                        Device ID:
-                      </strong>{" "}
-                      {point.device_id}
+                        <strong>
+                          Device ID:
+                        </strong>{" "}
 
-                      <br />
+                        {point.device_id || "N/A"}
 
-                      <strong>
-                        Latitude:
-                      </strong>{" "}
-                      {point.latitude}
+                        <br />
 
-                      <br />
+                        <strong>
+                          Latitude:
+                        </strong>{" "}
 
-                      <strong>
-                        Longitude:
-                      </strong>{" "}
-                      {point.longitude}
+                        {point.latitude}
 
-                      <br />
+                        <br />
 
-                      <strong>
-                        Timestamp:
-                      </strong>{" "}
+                        <strong>
+                          Longitude:
+                        </strong>{" "}
 
-                      {point.timestamp
-                        ? new Date(
-                            point.timestamp
-                          ).toLocaleString()
-                        : "N/A"}
+                        {point.longitude}
 
-                    </Popup>
+                        <br />
 
-                  </Marker>
+                        <strong>
+                          Timestamp:
+                        </strong>{" "}
 
-                ))}
+                        {point.timestamp
+                          ? new Date(
+                              point.timestamp
+                            ).toLocaleString()
+                          : "N/A"}
+
+                      </Popup>
+
+                    </Marker>
+
+                  )
+                )}
 
               </MapContainer>
 
@@ -504,7 +737,7 @@ function MobilityMap() {
 
           {!loading &&
             !error &&
-            points.length > 0 && (
+            filteredPoints.length > 0 && (
 
               <div className="map-overlay">
 
@@ -513,7 +746,7 @@ function MobilityMap() {
                 </strong>
 
                 <span>
-                  {points.length} GPS points loaded
+                  {filteredPoints.length} points visible
                 </span>
 
               </div>
@@ -564,9 +797,11 @@ function MobilityMap() {
 
         </div>
 
+
       </div>
 
     </div>
+
   );
 }
 
