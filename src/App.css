@@ -1400,3 +1400,115 @@
   }
 
 }
+/* Day 16 - Store API */
+
+.store-message {
+  padding: 50px 20px;
+  text-align: center;
+}
+
+.store-message h3 {
+  margin: 0 0 10px;
+  color: #1f2937;
+}
+
+.store-message p {
+  color: #6b7280;
+}
+
+.store-error {
+  margin: 20px;
+  padding: 18px;
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.store-error p {
+  margin: 8px 0 16px;
+}
+
+.store-details-panel {
+  margin-top: 24px;
+  padding: 24px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+}
+
+.store-details-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.store-details-header h3 {
+  margin: 0 0 5px;
+  color: #1f2937;
+}
+
+.store-details-header p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.store-details-close {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.store-details-close:hover {
+  background: #f3f4f6;
+}
+
+.store-details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.store-details-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 15px;
+  background: #f8fafc;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+
+.store-details-grid span {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.store-details-grid strong {
+  font-size: 14px;
+  color: #1f2937;
+}
+
+.store-details-note {
+  margin: 20px 0 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+@media (max-width: 700px) {
+  .store-details-panel {
+    padding: 16px;
+  }
+
+  .store-details-grid {
+    grid-template-columns: 1fr;
+  }
+}
