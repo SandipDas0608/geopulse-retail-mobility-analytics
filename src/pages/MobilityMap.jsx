@@ -1,3 +1,5 @@
+
+import API_BASE_URL from "../services/api";
 import {
   useEffect,
   useMemo,
@@ -16,9 +18,6 @@ import {
 import "leaflet/dist/leaflet.css";
 
 import L from "leaflet";
-
-
-// Fix default Leaflet marker icons
 delete L.Icon.Default.prototype._getIconUrl;
 
 L.Icon.Default.mergeOptions({
@@ -31,14 +30,8 @@ L.Icon.Default.mergeOptions({
   shadowUrl:
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png"
 });
-
-
-// Keep the current backend URL for now.
-// We will move this to one API configuration file
-// when your friend provides the public backend URL.
-
-const API_URL =
-  "http://127.0.0.1:8000/mobility/points?limit=1000";
+  const API_URL =
+  `${API_BASE_URL}/mobility/points?limit=1000`;
 
 
 // Automatically fit the map to visible points
