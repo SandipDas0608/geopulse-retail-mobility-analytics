@@ -1,1 +1,2 @@
 ﻿updating dashboard synchronization logs for footfall logic mathematical models testing
+appending pipeline models schema validation test parameters to the sync registry file
