@@ -1512,3 +1512,69 @@
     grid-template-columns: 1fr;
   }
 }
+/* ================================= */
+/* DAY 18 - STORE PERFORMANCE */
+/* ================================= */
+
+.store-activity-value {
+  color: #2563eb;
+  font-size: 14px;
+}
+
+.store-activity-zero {
+  color: #9ca3af;
+  font-size: 14px;
+}
+
+.store-details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.store-details-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 15px;
+  background: #f8fafc;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+
+.store-details-grid span {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.store-details-grid strong {
+  font-size: 14px;
+  color: #1f2937;
+}
+
+.store-details-note {
+  margin: 20px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #6b7280;
+}
+
+@media (max-width: 900px) {
+
+  .stores-table-container {
+    overflow-x: auto;
+  }
+
+  .stores-table {
+    min-width: 850px;
+  }
+
+}
+
+@media (max-width: 700px) {
+
+  .store-details-grid {
+    grid-template-columns: 1fr;
+  }
+
+}
