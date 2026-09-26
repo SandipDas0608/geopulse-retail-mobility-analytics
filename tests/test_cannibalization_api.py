@@ -108,3 +108,19 @@ def test_cannibalization_endpoint(monkeypatch):
     assert pair["jaccard_index"] > 0
     assert pair["overlap_pct_store_a"] > 0
     assert pair["overlap_pct_store_b"] > 0
+
+def test_cannibalization_rejects_invalid_radius():
+    response = client.get(
+        "/snowflake/cannibalization",
+        params={"radius_km": -1},
+    )
+
+    assert response.status_code == 422
+
+def test_cannibalization_rejects_invalid_overlap_percentage():
+    response = client.get(
+        "/snowflake/cannibalization",
+        params={"min_overlap_pct": 101},
+    )
+
+    assert response.status_code == 422

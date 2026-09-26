@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 import os
 import sys
 
@@ -84,8 +84,8 @@ def snowflake_stores(limit: int = 100):
 
 @router.get("/cannibalization")
 def snowflake_cannibalization(
-    radius_km: float = 2.0,
-    min_overlap_pct: float = 5.0,
+    radius_km: float = Query(default=2.0, gt=0),
+    min_overlap_pct: float = Query(default=5.0, ge=0, le=100),
 ):
     try:
         visits = get_snowflake_footfall_visits()
