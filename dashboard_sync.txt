@@ -3,3 +3,4 @@ appending pipeline models schema validation test parameters to the sync registry
 registering device tracking logic window functions and materialization table updates
 recording cannibalization data mart structural changes for shared visitor percentages
 documenting temporal morning and evening commute spikes audit queries in sync tracker
+logging column-level data dictionary modifications and generic tests implementation
