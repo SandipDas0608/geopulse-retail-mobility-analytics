@@ -5,3 +5,4 @@ recording cannibalization data mart structural changes for shared visitor percen
 documenting temporal morning and evening commute spikes audit queries in sync tracker
 logging column-level data dictionary modifications and generic tests implementation
 tracking custom data test validations for cannibalization percentage boundaries models
+recording secure read-only API views configuration for backend data handoff processes
