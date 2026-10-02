@@ -6,3 +6,4 @@ documenting temporal morning and evening commute spikes audit queries in sync tr
 logging column-level data dictionary modifications and generic tests implementation
 tracking custom data test validations for cannibalization percentage boundaries models
 recording secure read-only API views configuration for backend data handoff processes
+updating airflow DAG parameters to include hourly footfall and daily automated runs
