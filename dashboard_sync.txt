@@ -8,3 +8,4 @@ sync Sep 30
 sync Oct 01
 sync Oct 02
 sync Oct 05
+sync Oct 06
