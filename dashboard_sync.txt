@@ -8,3 +8,4 @@ tracking custom data test validations for cannibalization percentage boundaries 
 recording secure read-only API views configuration for backend data handoff processes
 updating airflow DAG parameters to include hourly footfall and daily automated runs
 logging end-to-end pytest suite implementation for API view schema data population
+registering kepler.gl 3D hexagon spatial visualization and temporal slider configs
