@@ -9,3 +9,4 @@ recording secure read-only API views configuration for backend data handoff proc
 updating airflow DAG parameters to include hourly footfall and daily automated runs
 logging end-to-end pytest suite implementation for API view schema data population
 registering kepler.gl 3D hexagon spatial visualization and temporal slider configs
+documenting post-run dbt macro additions for automated snowflake API role grants
