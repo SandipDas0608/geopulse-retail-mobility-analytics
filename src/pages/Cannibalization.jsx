@@ -1,5 +1,13 @@
 import API_BASE_URL from "../services/api";
-import { useCallback, useEffect, useMemo, useState } from "react";
+
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
+
 import {
   ResponsiveContainer,
   BarChart,
@@ -9,120 +17,40 @@ import {
   CartesianGrid,
   Tooltip
 } from "recharts";
+
+// ===============================
+// API CONFIGURATION
+// ===============================
 
 const STORE_API_URL =
-  `${API_BASE_URL}/snowflake/stores?limit=1000`;
-
-const MOBILITY_API_URL =
-  `${API_BASE_URL}/mobility/points?limit=1000`;
-
-const CANNIBALIZATION_RADIUS_METERS = 1000;
-
-
-// Calculate distance between two GPS coordinates
-function calculateDistanceMeters(
-  latitude1,
-  longitude1,
-  latitude2,
-  longitude2
-) {
-  const earthRadius = 6371000;
-
-  const lat1 = Number(latitude1);
-  const lon1 = Number(longitude1);
-  const lat2 = Number(latitude2);
-  const lon2 = Number(longitude2);
-
-  if (
-    !Number.isFinite(lat1) ||
-    !Number.isFinite(lon1) ||
-    !Number.isFinite(lat2) ||
-    !Number.isFinite(lon2)
-  ) {
-    return null;
-  }
-
-  const toRadians = (value) =>
-    (value * Math.PI) / 180;
-
-  const lat1Rad = toRadians(lat1);
-  const lat2Rad = toRadians(lat2);
-
-  const deltaLat =
-    toRadians(lat2 - lat1);
-
-  const deltaLon =
-    toRadians(lon2 - lon1);
-
-  const a =
-    Math.sin(deltaLat / 2) ** 2 +
-    Math.cos(lat1Rad) *
-      Math.cos(lat2Rad) *
-      Math.sin(deltaLon / 2) ** 2;
-
-  const c =
-    2 *
-    Math.atan2(
-      Math.sqrt(a),
-      Math.sqrt(1 - a)
-    );
-
-  return earthRadius * c;
-}
-
-
-// Format distance
-function formatDistance(distance) {
-  if (distance === null) {
-    return "N/A";
-  }
-
-  if (distance < 1000) {
-    return `${Math.round(distance)} m`;
-  }
-
-  return `${(distance / 1000).toFixed(2)} km`;
-}
-
-
-import API_BASE_URL from "../services/api";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip
-} from "recharts";
-
+  `${API_BASE_URL}/snowflake/stores?limit=100`;
 
 const CANNIBALIZATION_API_URL =
-  `${API_BASE_URL}/snowflake/cannibalization?radius_km=1&min_overlap_pct=5`;
+  `${API_BASE_URL}/snowflake/cannibalization`;
 
+// ===============================
+// FORMAT PERCENTAGE
+// ===============================
 
-// Format distance
-function formatDistance(distance) {
-  if (distance === null) {
-    return "N/A";
+function formatPercentage(value) {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return "0.0%";
   }
 
-  if (distance < 1000) {
-    return `${Math.round(distance)} m`;
-  }
-
-  return `${(distance / 1000).toFixed(2)} km`;
+  return `${number.toFixed(1)}%`;
 }
 
+// ===============================
+// MAIN COMPONENT
+// ===============================
 
 function Cannibalization() {
-
-  const [stores, setStores] =
-    useState([]);
+  const [stores, setStores] = useState([]);
 
   const [cannibalizationPairs, setCannibalizationPairs] =
-  useState([]);
+    useState([]);
 
   const [searchTerm, setSearchTerm] =
     useState("");
@@ -133,14 +61,22 @@ function Cannibalization() {
   const [error, setError] =
     useState("");
 
+  const [storeApiWarning, setStoreApiWarning] =
+    useState("");
+
   const [selectedPair, setSelectedPair] =
     useState(null);
 
+  // Keep track of the current API request
+  const requestControllerRef =
+    useRef(null);
 
-  // Fetch stores
+  // ===============================
+  // FETCH STORES
+  // ===============================
+
   const fetchStores = useCallback(
     async (signal) => {
-
       const response =
         await fetch(
           STORE_API_URL,
@@ -148,11 +84,9 @@ function Cannibalization() {
         );
 
       if (!response.ok) {
-
         if (response.status === 503) {
           throw new Error(
-            "The Store API is temporarily unavailable. " +
-            "The backend or Snowflake connection may not be ready."
+            "The Store API is temporarily unavailable."
           );
         }
 
@@ -182,23 +116,28 @@ function Cannibalization() {
         )
         .map((store) => ({
           store_id: store.store_id,
+
           store_name:
             store.store_name ??
             "Unnamed Store",
-          latitude: store.latitude,
-          longitude: store.longitude
-        }));
 
+          latitude:
+            store.latitude,
+
+          longitude:
+            store.longitude
+        }));
     },
     []
   );
 
+  // ===============================
+  // FETCH CANNIBALIZATION DATA
+  // ===============================
 
-    // Fetch backend cannibalization analysis
   const fetchCannibalizationPairs =
     useCallback(
       async (signal) => {
-
         const response =
           await fetch(
             CANNIBALIZATION_API_URL,
@@ -206,6 +145,13 @@ function Cannibalization() {
           );
 
         if (!response.ok) {
+          if (response.status === 503) {
+            throw new Error(
+              "The Cannibalization API is temporarily unavailable. " +
+              "The backend or Snowflake connection may not be ready."
+            );
+          }
+
           throw new Error(
             `Cannibalization API request failed: HTTP ${response.status}`
           );
@@ -224,38 +170,107 @@ function Cannibalization() {
         }
 
         return data.pairs;
-
       },
       []
     );
 
+  // ===============================
+  // LOAD ALL DATA
+  // ===============================
 
-  // Load data
   const fetchCannibalizationData =
     useCallback(
       async (signal) => {
-
         try {
-
           setLoading(true);
           setError("");
+          setStoreApiWarning("");
+
+          /*
+           * Fetch both APIs independently.
+           *
+           * The Cannibalization API is the main
+           * data source for this page.
+           *
+           * Store API is only used for the
+           * Total Stores summary.
+           */
+
+          const pairPromise =
+            fetchCannibalizationPairs(
+              signal
+            );
+
+          const storePromise =
+            fetchStores(
+              signal
+            );
 
           const [
-  storeData,
-  cannibalizationPairs
-] = await Promise.all([
-  fetchStores(signal),
-  fetchCannibalizationPairs(signal)
-]);
+            pairResult,
+            storeResult
+          ] = await Promise.allSettled([
+            pairPromise,
+            storePromise
+          ]);
 
-setStores(storeData);
-setCannibalizationPairs(cannibalizationPairs);
-setSelectedPair(null);
+          if (signal?.aborted) {
+            return;
+          }
 
-        } catch (err) {
+          // ===============================
+          // CANNIBALIZATION RESULT
+          // ===============================
 
           if (
-            err.name === "AbortError"
+            pairResult.status ===
+            "rejected"
+          ) {
+            throw pairResult.reason;
+          }
+
+          const pairData =
+            pairResult.value;
+
+          // ===============================
+          // STORE RESULT
+          // ===============================
+
+          if (
+            storeResult.status ===
+            "fulfilled"
+          ) {
+            setStores(
+              storeResult.value
+            );
+          } else {
+            /*
+             * Store data is supplementary.
+             * Don't fail the whole page if
+             * only the Store API fails.
+             */
+
+            setStores([]);
+
+            setStoreApiWarning(
+              "Store summary data is temporarily unavailable."
+            );
+          }
+
+          // ===============================
+          // SAVE CANNIBALIZATION DATA
+          // ===============================
+
+          setCannibalizationPairs(
+            pairData
+          );
+
+          setSelectedPair(null);
+
+        } catch (err) {
+          if (
+            err?.name ===
+            "AbortError"
           ) {
             return;
           }
@@ -265,40 +280,48 @@ setSelectedPair(null);
             err
           );
 
-          setError(
+          if (
             err instanceof TypeError
-              ? "Cannot connect to the backend APIs. " +
-                "Check that the backend is running and reachable."
-              : err.message
-          );
+          ) {
+            setError(
+              `Unable to connect to the GeoPulse backend at ${API_BASE_URL}. ` +
+              "Please check that the backend and Cloudflare tunnel are running."
+            );
+          } else {
+            setError(
+              err?.message ||
+              "Unable to load cannibalization data."
+            );
+          }
 
-          setStores([]);
           setCannibalizationPairs([]);
+
           setSelectedPair(null);
 
         } finally {
-
-          if (!signal?.aborted) {
+          if (
+            !signal?.aborted
+          ) {
             setLoading(false);
           }
-
         }
-
       },
       [
-        [
-  fetchStores,
-  fetchCannibalizationPairs
-]
+        fetchStores,
+        fetchCannibalizationPairs
       ]
     );
 
+  // ===============================
+  // LOAD DATA WHEN PAGE OPENS
+  // ===============================
 
-  // Load when page opens
   useEffect(() => {
-
     const controller =
       new AbortController();
+
+    requestControllerRef.current =
+      controller;
 
     fetchCannibalizationData(
       controller.signal
@@ -306,77 +329,69 @@ setSelectedPair(null);
 
     return () => {
       controller.abort();
-    };
 
+      if (
+        requestControllerRef.current ===
+        controller
+      ) {
+        requestControllerRef.current =
+          null;
+      }
+    };
   }, [
     fetchCannibalizationData
   ]);
 
+  // ===============================
+  // MAP NEW BACKEND RESPONSE
+  // ===============================
 
-  // Create nearby store pairs
-    const storePairs =
+  const storePairs =
     useMemo(() => {
+      return cannibalizationPairs
+        .map((pair) => ({
+          existingStoreName:
+            String(
+              pair.existing_store_name ??
+              "Unknown Store"
+            ),
 
-      const storeMap =
-        new Map(
-          stores.map((store) => [
-            String(store.store_id),
-            store
-          ])
+          newStoreName:
+            String(
+              pair.new_store_name ??
+              "Unknown Store"
+            ),
+
+          sharedVisitorsCount:
+            Number(
+              pair.shared_visitors_count
+            ) || 0,
+
+          totalExistingCustomers:
+            Number(
+              pair.total_existing_customers
+            ) || 0,
+
+          cannibalizationPercentage:
+            Number(
+              pair.cannibalization_percentage
+            ) || 0
+        }))
+        .filter(
+          (pair) =>
+            pair.existingStoreName &&
+            pair.newStoreName
         );
-
-      return cannibalizationPairs.map(
-        (pair) => {
-
-          const storeA =
-            storeMap.get(
-              String(pair.store_a)
-            );
-
-          const storeB =
-            storeMap.get(
-              String(pair.store_b)
-            );
-
-          return {
-            storeAId: pair.store_a,
-            storeAName:
-              storeA?.store_name ??
-              String(pair.store_a),
-
-            storeBId: pair.store_b,
-            storeBName:
-              storeB?.store_name ??
-              String(pair.store_b),
-
-            distance:
-              Number(pair.distance_km) * 1000,
-            sharedVisitors:
-              Number(pair.shared_visitors) || 0,
-
-            jaccardIndex:
-              Number(pair.jaccard_index) || 0,
-
-            overlapPctStoreA:
-              Number(pair.overlap_pct_store_a) || 0,
-
-            overlapPctStoreB:
-              Number(pair.overlap_pct_store_b) || 0
-          };
-
-        }
-      );
-
     }, [
-      stores,
       cannibalizationPairs
     ]);
 
+  // ===============================
+  // SEARCH
+  // ===============================
 
-  // Search
   const filteredPairs =
     useMemo(() => {
-
       const search =
         searchTerm
           .trim()
@@ -388,99 +403,149 @@ setSelectedPair(null);
 
       return storePairs.filter(
         (pair) => {
-
-          const storeA =
-            `${pair.storeAId} ${pair.storeAName}`
+          const existingStore =
+            pair.existingStoreName
               .toLowerCase();
 
-          const storeB =
-            `${pair.storeBId} ${pair.storeBName}`
+          const newStore =
+            pair.newStoreName
               .toLowerCase();
 
           return (
-            storeA.includes(search) ||
-            storeB.includes(search)
+            existingStore.includes(
+              search
+            ) ||
+            newStore.includes(
+              search
+            )
           );
-
         }
       );
-
     }, [
       storePairs,
       searchTerm
     ]);
 
+  // ===============================
+  // STORES INVOLVED IN PAIRS
+  // ===============================
 
-  // Stores involved in nearby relationships
-  const storesWithNearbyRelations =
+  const storesWithRelations =
     useMemo(() => {
-
-      const ids =
+      const names =
         new Set();
 
       storePairs.forEach(
         (pair) => {
-
-          ids.add(
-            String(pair.storeAId)
+          names.add(
+            pair.existingStoreName
           );
 
-          ids.add(
-            String(pair.storeBId)
+          names.add(
+            pair.newStoreName
           );
-
         }
       );
 
-      return ids.size;
+      return names.size;
+    }, [
+      storePairs
+    ]);
 
-    }, [storePairs]);
+  // ===============================
+  // AVERAGE CANNIBALIZATION
+  // ===============================
 
+  const averageCannibalization =
+    useMemo(() => {
+      if (
+        storePairs.length === 0
+      ) {
+        return 0;
+      }
 
-  // Prepare chart data
+      const total =
+        storePairs.reduce(
+          (
+            sum,
+            pair
+          ) =>
+            sum +
+            pair.cannibalizationPercentage,
+          0
+        );
+
+      return (
+        total /
+        storePairs.length
+      );
+    }, [
+      storePairs
+    ]);
+
+  // ===============================
+  // CHART DATA
+  // ===============================
+
   const chartData =
     useMemo(() => {
-
       return filteredPairs
         .slice(0, 10)
         .map(
           (pair, index) => ({
-
             pair:
               `Pair ${index + 1}`,
 
             stores:
-              `${pair.storeAName} ↔ ${pair.storeBName}`,
+              `${pair.existingStoreName} ↔ ${pair.newStoreName}`,
 
-            distance:
-              Number(
-                (
-                  pair.distance / 1000
-                ).toFixed(2)
-              ),
+            cannibalizationPercentage:
+              pair.cannibalizationPercentage,
 
-            sharedVisitors:
-  pair.sharedVisitors
+            sharedVisitorsCount:
+              pair.sharedVisitorsCount,
 
+            totalExistingCustomers:
+              pair.totalExistingCustomers
           })
         );
+    }, [
+      filteredPairs
+    ]);
 
-    }, [filteredPairs]);
+  // ===============================
+  // REFRESH HANDLER
+  // ===============================
 
+  const handleRefresh =
+    () => {
+      // Cancel previous request
+      if (
+        requestControllerRef.current
+      ) {
+        requestControllerRef.current.abort();
+      }
 
-  // Closest pair
-  const closestPair =
-    storePairs.length > 0
-      ? storePairs[0]
-      : null;
+      // Create new request
+      const controller =
+        new AbortController();
 
+      requestControllerRef.current =
+        controller;
+
+      fetchCannibalizationData(
+        controller.signal
+      );
+    };
+
+  // ===============================
+  // RENDER
+  // ===============================
 
   return (
-
     <div className="stores-page">
 
-
-      {/* Page Introduction */}
+      {/* PAGE INTRODUCTION */}
 
       <div className="page-intro">
 
@@ -491,40 +556,52 @@ setSelectedPair(null);
           </h2>
 
           <p>
-            Visualize nearby store relationships
-            using geographic proximity and mobility activity.
+            Analyze precomputed store-pair
+            cannibalization using shared visitors
+            and existing customer activity.
           </p>
 
         </div>
 
-
         <button
           className="map-button"
-          onClick={() => {
-
-            const controller =
-              new AbortController();
-
-            fetchCannibalizationData(
-              controller.signal
-            );
-
-          }}
+          onClick={handleRefresh}
           disabled={loading}
         >
-
           {loading
             ? "Loading..."
             : "Refresh Analysis"}
-
         </button>
 
       </div>
 
 
-      {/* Summary Cards */}
+      {/* STORE API WARNING */}
+
+      {!loading &&
+        !error &&
+        storeApiWarning && (
+
+          <div className="store-error">
+
+            <strong>
+              Store Summary Warning
+            </strong>
+
+            <p>
+              {storeApiWarning}
+            </p>
+
+          </div>
+
+        )}
+
+
+      {/* SUMMARY CARDS */}
 
       <div className="mobility-stats">
+
+        {/* TOTAL STORES */}
 
         <div className="mobility-stat-card">
 
@@ -539,7 +616,9 @@ setSelectedPair(null);
             </p>
 
             <h3>
-              {loading || error
+              {loading ||
+              error ||
+              stores.length === 0
                 ? "--"
                 : stores.length}
             </h3>
@@ -548,6 +627,8 @@ setSelectedPair(null);
 
         </div>
 
+
+        {/* STORE PAIRS */}
 
         <div className="mobility-stat-card">
 
@@ -558,7 +639,7 @@ setSelectedPair(null);
           <div>
 
             <p>
-              Nearby Store Pairs
+              Store Pairs
             </p>
 
             <h3>
@@ -572,26 +653,34 @@ setSelectedPair(null);
         </div>
 
 
+        {/* AVERAGE CANNIBALIZATION */}
+
         <div className="mobility-stat-card">
 
           <span className="mobility-stat-icon">
-            ⌖
+            %
           </span>
 
           <div>
 
             <p>
-              Analysis Radius
+              Avg. Cannibalization
             </p>
 
             <h3>
-              1 km
+              {loading || error
+                ? "--"
+                : formatPercentage(
+                    averageCannibalization
+                  )}
             </h3>
 
           </div>
 
         </div>
 
+
+        {/* STORES IN PAIRS */}
 
         <div className="mobility-stat-card">
 
@@ -608,7 +697,7 @@ setSelectedPair(null);
             <h3>
               {loading || error
                 ? "--"
-                : storesWithNearbyRelations}
+                : storesWithRelations}
             </h3>
 
           </div>
@@ -618,7 +707,7 @@ setSelectedPair(null);
       </div>
 
 
-      {/* Visualization */}
+      {/* VISUALIZATION */}
 
       {!loading &&
         !error &&
@@ -635,14 +724,13 @@ setSelectedPair(null);
                 </h3>
 
                 <p>
-                  Distance and shared visitor overlap
-                  for nearby store relationships.
+                  Cannibalization percentage
+                  for the available store pairs.
                 </p>
 
               </div>
 
             </div>
-
 
             <div className="cannibalization-chart">
 
@@ -669,7 +757,12 @@ setSelectedPair(null);
                     dataKey="pair"
                   />
 
-                  <YAxis />
+                  <YAxis
+                    domain={[
+                      0,
+                      "auto"
+                    ]}
+                  />
 
                   <Tooltip
                     formatter={(
@@ -678,20 +771,33 @@ setSelectedPair(null);
                     ) => {
 
                       if (
-                        name === "distance"
+                        name ===
+                        "cannibalizationPercentage"
                       ) {
                         return [
-                          `${value} km`,
-                          "Distance"
+                          `${Number(
+                            value
+                          ).toFixed(1)}%`,
+                          "Cannibalization"
+                        ];
+                      }
+
+                      if (
+                        name ===
+                        "sharedVisitorsCount"
+                      ) {
+                        return [
+                          value,
+                          "Shared Visitors"
                         ];
                       }
 
                       return [
-  value,
-  "Shared Visitors"
-];
-
+                        value,
+                        name
+                      ];
                     }}
+
                     labelFormatter={(
                       label
                     ) => {
@@ -706,13 +812,12 @@ setSelectedPair(null);
                       return item
                         ? item.stores
                         : label;
-
                     }}
                   />
 
                   <Bar
-  dataKey="sharedVisitors"
-  name="Shared Visitors"
+                    dataKey="cannibalizationPercentage"
+                    name="Cannibalization"
                     fill="#2563eb"
                     radius={[
                       5,
@@ -733,7 +838,7 @@ setSelectedPair(null);
         )}
 
 
-      {/* Analysis Table */}
+      {/* ANALYSIS TABLE */}
 
       <div className="stores-card">
 
@@ -742,20 +847,19 @@ setSelectedPair(null);
           <div>
 
             <h3>
-              Nearby Store Relationships
+              Store Cannibalization Pairs
             </h3>
 
             <p>
-              Store pairs within the 1 kilometer
-              geographic analysis radius.
+              Precomputed store relationships
+              returned by the Snowflake analytics mart.
             </p>
 
           </div>
 
-
           <input
             type="search"
-            placeholder="Search by Store ID or Name..."
+            placeholder="Search by Store Name..."
             aria-label="Search store pairs"
             value={searchTerm}
             onChange={(event) =>
@@ -769,19 +873,19 @@ setSelectedPair(null);
         </div>
 
 
-        {/* Loading */}
+        {/* LOADING */}
 
         {loading && (
 
           <div className="store-message">
 
             <h3>
-              Loading Visualization...
+              Loading Cannibalization Data...
             </h3>
 
             <p>
-              Fetching store and mobility
-              data from the backend.
+              Fetching precomputed store-pair
+              analytics from the backend.
             </p>
 
           </div>
@@ -789,7 +893,7 @@ setSelectedPair(null);
         )}
 
 
-        {/* Error */}
+        {/* ERROR */}
 
         {!loading &&
           error && (
@@ -806,16 +910,7 @@ setSelectedPair(null);
 
               <button
                 className="store-view-button"
-                onClick={() => {
-
-                  const controller =
-                    new AbortController();
-
-                  fetchCannibalizationData(
-                    controller.signal
-                  );
-
-                }}
+                onClick={handleRefresh}
               >
                 Try Again
               </button>
@@ -825,44 +920,21 @@ setSelectedPair(null);
           )}
 
 
-        {/* No data */}
+        {/* NO PAIRS */}
 
         {!loading &&
           !error &&
-          stores.length === 0 && (
-
-            <div className="store-message">
-
-              <h3>
-                No Stores Found
-              </h3>
-
-              <p>
-                No store records were returned
-                by the backend.
-              </p>
-
-            </div>
-
-          )}
-
-
-        {/* No pairs */}
-
-        {!loading &&
-          !error &&
-          stores.length > 0 &&
           storePairs.length === 0 && (
 
             <div className="store-message">
 
               <h3>
-                No Nearby Store Pairs
+                No Cannibalization Pairs Found
               </h3>
 
               <p>
-                No stores were found within
-                the 1 kilometer radius.
+                The backend did not return
+                any store-pair records.
               </p>
 
             </div>
@@ -870,7 +942,7 @@ setSelectedPair(null);
           )}
 
 
-        {/* No search results */}
+        {/* NO SEARCH RESULTS */}
 
         {!loading &&
           !error &&
@@ -902,7 +974,7 @@ setSelectedPair(null);
           )}
 
 
-        {/* Table */}
+        {/* TABLE */}
 
         {!loading &&
           !error &&
@@ -917,19 +989,23 @@ setSelectedPair(null);
                   <tr>
 
                     <th>
-                      Store A
+                      Existing Store
                     </th>
 
                     <th>
-                      Store B
-                    </th>
-
-                    <th>
-                      Distance
+                      New Store
                     </th>
 
                     <th>
                       Shared Visitors
+                    </th>
+
+                    <th>
+                      Existing Customers
+                    </th>
+
+                    <th>
+                      Cannibalization
                     </th>
 
                     <th>
@@ -940,7 +1016,6 @@ setSelectedPair(null);
 
                 </thead>
 
-
                 <tbody>
 
                   {filteredPairs.map(
@@ -948,63 +1023,64 @@ setSelectedPair(null);
 
                       <tr
                         key={
-                          `${pair.storeAId}-${pair.storeBId}-${index}`
+                          `${pair.existingStoreName}-${pair.newStoreName}-${index}`
                         }
                       >
 
                         <td>
 
                           <strong>
-                            {pair.storeAName}
+                            {pair.existingStoreName}
                           </strong>
 
-                          <div className="store-pair-id">
-                            ID: {pair.storeAId}
-                          </div>
-
                         </td>
-
 
                         <td>
 
                           <strong>
-                            {pair.storeBName}
-                          </strong>
-
-                          <div className="store-pair-id">
-                            ID: {pair.storeBId}
-                          </div>
-
-                        </td>
-
-
-                        <td>
-
-                          <strong>
-                            {formatDistance(
-                              pair.distance
-                            )}
+                            {pair.newStoreName}
                           </strong>
 
                         </td>
-
 
                         <td>
 
                           <strong
                             className={
-                              pair.sharedVisitors > 0
+                              pair.sharedVisitorsCount >
+                              0
                                 ? "store-activity-value"
                                 : "store-activity-zero"
                             }
                           >
                             {
-                             pair.sharedVisitors
+                              pair.sharedVisitorsCount
                             }
                           </strong>
 
                         </td>
 
+                        <td>
+
+                          <strong>
+                            {
+                              pair.totalExistingCustomers
+                            }
+                          </strong>
+
+                        </td>
+
+                        <td>
+
+                          <strong
+                            className="store-activity-value"
+                          >
+                            {formatPercentage(
+                              pair.cannibalizationPercentage
+                            )}
+                          </strong>
+
+                        </td>
 
                         <td>
 
@@ -1037,7 +1113,7 @@ setSelectedPair(null);
       </div>
 
 
-      {/* Selected Pair */}
+      {/* SELECTED PAIR DETAILS */}
 
       {selectedPair && (
 
@@ -1052,11 +1128,10 @@ setSelectedPair(null);
               </h3>
 
               <p>
-                Geographic and visitor overlap analysis
+                Precomputed cannibalization analysis
               </p>
 
             </div>
-
 
             <button
               className="store-details-close"
@@ -1070,49 +1145,31 @@ setSelectedPair(null);
 
           </div>
 
-
           <div className="store-details-grid">
 
             <div>
 
               <span>
-                Store A
+                Existing Store
               </span>
 
               <strong>
-                {selectedPair.storeAName}
+                {selectedPair.existingStoreName}
               </strong>
 
             </div>
-
 
             <div>
 
               <span>
-                Store B
+                New Store
               </span>
 
               <strong>
-                {selectedPair.storeBName}
+                {selectedPair.newStoreName}
               </strong>
 
             </div>
-
-
-            <div>
-
-              <span>
-                Distance
-              </span>
-
-              <strong>
-                {formatDistance(
-                  selectedPair.distance
-                )}
-              </strong>
-
-            </div>
-
 
             <div>
 
@@ -1121,21 +1178,48 @@ setSelectedPair(null);
               </span>
 
               <strong>
-                {selectedPair.sharedVisitors}
+                {selectedPair.sharedVisitorsCount}
+              </strong>
+
+            </div>
+
+            <div>
+
+              <span>
+                Total Existing Customers
+              </span>
+
+              <strong>
+                {selectedPair.totalExistingCustomers}
+              </strong>
+
+            </div>
+
+            <div>
+
+              <span>
+                Cannibalization
+              </span>
+
+              <strong>
+                {formatPercentage(
+                  selectedPair.cannibalizationPercentage
+                )}
               </strong>
 
             </div>
 
           </div>
 
-
           <p className="store-details-note">
 
-            The visualization represents geographic
-            proximity and shared visitor overlap between
-            store pairs. It does not establish confirmed
-            customer switching, revenue loss, or actual
-            sales cannibalization.
+            This visualization presents the
+            precomputed cannibalization metric
+            supplied by the backend analytics mart.
+            It should not be interpreted as a direct
+            measurement of revenue loss or confirmed
+            customer switching without additional
+            business validation.
 
           </p>
 
@@ -1144,7 +1228,6 @@ setSelectedPair(null);
       )}
 
     </div>
-
   );
 }
 

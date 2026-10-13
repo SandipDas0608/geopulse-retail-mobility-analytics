@@ -16,7 +16,10 @@ const MOBILITY_API_URL =
 const PERFORMANCE_RADIUS_METERS = 500;
 
 
-// Calculate distance between two GPS coordinates
+// =====================================
+// Calculate distance between coordinates
+// =====================================
+
 function calculateDistanceMeters(
   latitude1,
   longitude1,
@@ -70,9 +73,14 @@ function calculateDistanceMeters(
 }
 
 
+// =====================================
+// Stores Component
+// =====================================
+
 function Stores() {
 
   const navigate = useNavigate();
+
 
   const [stores, setStores] =
     useState([]);
@@ -90,75 +98,95 @@ function Stores() {
     useState("");
 
 
-  // Fetch store data
-  const fetchStores = useCallback(
-    async (signal) => {
+  // =====================================
+  // Fetch Stores
+  // =====================================
 
-      const response =
-        await fetch(
-          STORE_API_URL,
-          { signal }
-        );
+  const fetchStores =
+    useCallback(
+      async (signal) => {
 
-      if (!response.ok) {
+        const response =
+          await fetch(
+            STORE_API_URL,
+            {
+              signal
+            }
+          );
 
-        if (response.status === 503) {
+
+        if (!response.ok) {
+
+          if (
+            response.status === 503
+          ) {
+
+            throw new Error(
+              "The Store API is temporarily unavailable. " +
+              "The backend or Snowflake connection may not be ready."
+            );
+
+          }
+
 
           throw new Error(
-            "The Store API is temporarily unavailable. " +
-            "The backend or Snowflake connection may not be ready."
+            `Store API request failed: HTTP ${response.status}`
           );
 
         }
 
-        throw new Error(
-          `Store API request failed: HTTP ${response.status}`
-        );
 
-      }
-
-      const data =
-        await response.json();
-
-      if (
-        data.status !== "success" ||
-        !Array.isArray(data.stores)
-      ) {
-
-        throw new Error(
-          "Invalid response received from the Store API."
-        );
-
-      }
-
-      return data.stores
-        .filter(
-          (store) =>
-            store &&
-            store.store_id !== null &&
-            store.store_id !== undefined
-        )
-        .map((store) => ({
-          store_id:
-            store.store_id,
-
-          store_name:
-            store.store_name ??
-            "Unnamed Store",
-
-          latitude:
-            store.latitude,
-
-          longitude:
-            store.longitude
-        }));
-
-    },
-    []
-  );
+        const data =
+          await response.json();
 
 
-  // Fetch mobility data
+        if (
+          data.status !== "success" ||
+          !Array.isArray(data.stores)
+        ) {
+
+          throw new Error(
+            "Invalid response received from the Store API."
+          );
+
+        }
+
+
+        return data.stores
+
+          .filter(
+            (store) =>
+              store &&
+              store.store_id !== null &&
+              store.store_id !== undefined
+          )
+
+          .map(
+            (store) => ({
+              store_id:
+                store.store_id,
+
+              store_name:
+                store.store_name ??
+                "Unnamed Store",
+
+              latitude:
+                store.latitude,
+
+              longitude:
+                store.longitude
+            })
+          );
+
+      },
+      []
+    );
+
+
+  // =====================================
+  // Fetch Mobility Points
+  // =====================================
+
   const fetchMobilityPoints =
     useCallback(
       async (signal) => {
@@ -166,8 +194,11 @@ function Stores() {
         const response =
           await fetch(
             MOBILITY_API_URL,
-            { signal }
+            {
+              signal
+            }
           );
+
 
         if (!response.ok) {
 
@@ -177,10 +208,13 @@ function Stores() {
 
         }
 
+
         const data =
           await response.json();
 
+
         if (
+          data.status !== "success" ||
           !Array.isArray(data.points)
         ) {
 
@@ -189,6 +223,7 @@ function Stores() {
           );
 
         }
+
 
         return data.points.filter(
           (point) => {
@@ -202,6 +237,7 @@ function Stores() {
               Number(
                 point.longitude
               );
+
 
             return (
               Number.isFinite(latitude) &&
@@ -220,7 +256,10 @@ function Stores() {
     );
 
 
-  // Fetch both APIs
+  // =====================================
+  // Fetch Store + Mobility Data
+  // =====================================
+
   const fetchStorePerformance =
     useCallback(
       async (signal) => {
@@ -228,7 +267,6 @@ function Stores() {
         try {
 
           setLoading(true);
-
           setError("");
 
 
@@ -249,6 +287,7 @@ function Stores() {
             mobilityData
           );
 
+
         } catch (err) {
 
           if (
@@ -258,21 +297,37 @@ function Stores() {
             return;
           }
 
+
           console.error(
             "Store Performance API Error:",
             err
           );
 
-          setError(
+
+          if (
             err instanceof TypeError
-              ? "Cannot connect to the backend APIs. " +
-                "Check that the backend is running and reachable."
-              : err.message
-          );
+          ) {
+
+            setError(
+              "Cannot connect to the backend APIs. " +
+              "The frontend is running, but the backend at " +
+              `${API_BASE_URL} ` +
+              "is not reachable."
+            );
+
+          } else {
+
+            setError(
+              err.message ||
+              "Failed to load store performance data."
+            );
+
+          }
+
 
           setStores([]);
-
           setMobilityPoints([]);
+
 
         } finally {
 
@@ -294,15 +349,20 @@ function Stores() {
     );
 
 
-  // Load data on page open
+  // =====================================
+  // Initial Load
+  // =====================================
+
   useEffect(() => {
 
     const controller =
       new AbortController();
 
+
     fetchStorePerformance(
       controller.signal
     );
+
 
     return () => {
       controller.abort();
@@ -313,7 +373,27 @@ function Stores() {
   ]);
 
 
-  // Search stores
+  // =====================================
+  // Refresh / Retry
+  // =====================================
+
+  const handleRefresh =
+    () => {
+
+      const controller =
+        new AbortController();
+
+      fetchStorePerformance(
+        controller.signal
+      );
+
+    };
+
+
+  // =====================================
+  // Search Stores
+  // =====================================
+
   const filteredStores =
     useMemo(() => {
 
@@ -322,9 +402,11 @@ function Stores() {
           .trim()
           .toLowerCase();
 
+
       if (!search) {
         return stores;
       }
+
 
       return stores.filter(
         (store) => {
@@ -334,10 +416,12 @@ function Stores() {
               store.store_id
             ).toLowerCase();
 
+
           const name =
             String(
               store.store_name
             ).toLowerCase();
+
 
           return (
             id.includes(search) ||
@@ -353,7 +437,10 @@ function Stores() {
     ]);
 
 
-  // Calculate store performance
+  // =====================================
+  // Calculate Store Performance
+  // =====================================
+
   const storePerformance =
     useMemo(() => {
 
@@ -419,12 +506,14 @@ function Stores() {
 
 
           return {
+
             ...store,
 
             nearbyGpsActivity:
               nearbyCount,
 
             mapped: true
+
           };
 
         }
@@ -436,7 +525,10 @@ function Stores() {
     ]);
 
 
-  // Number of mapped stores
+  // =====================================
+  // Mapped Locations
+  // =====================================
+
   const mappedLocations =
     useMemo(() => {
 
@@ -452,6 +544,7 @@ function Stores() {
             Number(
               store.longitude
             );
+
 
           return (
             Number.isFinite(
@@ -469,22 +562,36 @@ function Stores() {
         }
       ).length;
 
-    }, [stores]);
+    }, [
+      stores
+    ]);
 
 
-  // Total nearby GPS activity
+  // =====================================
+  // Total Nearby GPS Activity
+  // =====================================
+
   const totalNearbyActivity =
     useMemo(() => {
 
       return storePerformance.reduce(
-        (total, store) =>
+        (
+          total,
+          store
+        ) =>
           total +
           store.nearbyGpsActivity,
         0
       );
 
-    }, [storePerformance]);
+    }, [
+      storePerformance
+    ]);
 
+
+  // =====================================
+  // Format Coordinates
+  // =====================================
 
   const formatCoordinate =
     (value) => {
@@ -499,8 +606,10 @@ function Stores() {
 
       }
 
+
       const number =
         Number(value);
+
 
       return Number.isFinite(
         number
@@ -510,6 +619,10 @@ function Stores() {
 
     };
 
+
+  // =====================================
+  // Render
+  // =====================================
 
   return (
 
@@ -537,17 +650,12 @@ function Stores() {
 
         <button
           className="map-button"
-          onClick={() => {
-
-            const controller =
-              new AbortController();
-
-            fetchStorePerformance(
-              controller.signal
-            );
-
-          }}
-          disabled={loading}
+          onClick={
+            handleRefresh
+          }
+          disabled={
+            loading
+          }
         >
 
           {loading
@@ -742,16 +850,9 @@ function Stores() {
 
               <button
                 className="store-view-button"
-                onClick={() => {
-
-                  const controller =
-                    new AbortController();
-
-                  fetchStorePerformance(
-                    controller.signal
-                  );
-
-                }}
+                onClick={
+                  handleRefresh
+                }
               >
                 Try Again
               </button>
@@ -950,7 +1051,6 @@ function Stores() {
           )}
 
       </div>
-
 
     </div>
 

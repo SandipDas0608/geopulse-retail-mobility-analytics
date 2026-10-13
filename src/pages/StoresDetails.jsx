@@ -1,10 +1,13 @@
 import API_BASE_URL from "../services/api";
+
 import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState
 } from "react";
+
 import {
   MapContainer,
   TileLayer,
@@ -13,8 +16,17 @@ import {
   Circle,
   useMap
 } from "react-leaflet";
+
 import L from "leaflet";
-import { useNavigate, useParams } from "react-router-dom";
+import {
+  useNavigate,
+  useParams
+} from "react-router-dom";
+
+
+// =====================================================
+// API URLS
+// =====================================================
 
 const STORE_API_URL =
   `${API_BASE_URL}/snowflake/stores?limit=1000`;
@@ -22,10 +34,18 @@ const STORE_API_URL =
 const MOBILITY_API_URL =
   `${API_BASE_URL}/mobility/points?limit=1000`;
 
+
+// =====================================================
+// CONFIGURATION
+// =====================================================
+
 const ACTIVITY_RADIUS_METERS = 500;
 
 
-// Fix Leaflet marker icons
+// =====================================================
+// LEAFLET DEFAULT MARKER ICON
+// =====================================================
+
 const defaultIcon = L.icon({
   iconUrl:
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
@@ -43,7 +63,10 @@ const defaultIcon = L.icon({
 });
 
 
-// Calculate distance between GPS coordinates
+// =====================================================
+// DISTANCE CALCULATION
+// =====================================================
+
 function calculateDistanceMeters(
   latitude1,
   longitude1,
@@ -54,6 +77,7 @@ function calculateDistanceMeters(
 
   const lat1 = Number(latitude1);
   const lon1 = Number(longitude1);
+
   const lat2 = Number(latitude2);
   const lon2 = Number(longitude2);
 
@@ -95,32 +119,29 @@ function calculateDistanceMeters(
 }
 
 
-// Component to move map to selected store
-function MapCenter({ latitude, longitude }) {
+// =====================================================
+// MAP CENTER CONTROLLER
+// =====================================================
 
+function MapCenter({
+  latitude,
+  longitude
+}) {
   const map = useMap();
 
   useEffect(() => {
+    const lat = Number(latitude);
+    const lon = Number(longitude);
 
     if (
-      Number.isFinite(
-        Number(latitude)
-      ) &&
-      Number.isFinite(
-        Number(longitude)
-      )
+      Number.isFinite(lat) &&
+      Number.isFinite(lon)
     ) {
-
       map.setView(
-        [
-          Number(latitude),
-          Number(longitude)
-        ],
+        [lat, lon],
         15
       );
-
     }
-
   }, [
     map,
     latitude,
@@ -131,14 +152,24 @@ function MapCenter({ latitude, longitude }) {
 }
 
 
+// =====================================================
+// MAIN COMPONENT
+// =====================================================
+
 function StoresDetails() {
 
-  const { storeId } =
-    useParams();
+  // ===================================================
+  // URL PARAMETER
+  // ===================================================
 
-  const navigate =
-    useNavigate();
+  const { storeId } = useParams();
 
+  const navigate = useNavigate();
+
+
+  // ===================================================
+  // STATE
+  // ===================================================
 
   const [store, setStore] =
     useState(null);
@@ -153,7 +184,42 @@ function StoresDetails() {
     useState("");
 
 
-  // Fetch store and mobility data
+  // ===================================================
+  // REQUEST CONTROLLER
+  // ===================================================
+
+  const requestControllerRef =
+    useRef(null);
+
+
+  // ===================================================
+  // NORMALIZE STORE ID
+  // ===================================================
+
+  const normalizedStoreId = useMemo(() => {
+
+    if (
+      storeId === undefined ||
+      storeId === null
+    ) {
+      return "";
+    }
+
+    try {
+      return decodeURIComponent(
+        String(storeId)
+      );
+    } catch {
+      return String(storeId);
+    }
+
+  }, [storeId]);
+
+
+  // ===================================================
+  // FETCH STORE + MOBILITY DATA
+  // ===================================================
+
   const fetchStoreDetails =
     useCallback(
       async (signal) => {
@@ -162,22 +228,49 @@ function StoresDetails() {
 
           setLoading(true);
           setError("");
+          setStore(null);
+          setMobilityPoints([]);
 
+
+          // -------------------------------------------
+          // CHECK STORE ID
+          // -------------------------------------------
+
+          if (!normalizedStoreId) {
+
+            setError(
+              "Store ID is missing. Please select a store from the Stores page."
+            );
+
+            return;
+          }
+
+
+          // -------------------------------------------
+          // API REQUESTS
+          // -------------------------------------------
 
           const [
             storeResponse,
             mobilityResponse
           ] = await Promise.all([
+
             fetch(
               STORE_API_URL,
               { signal }
             ),
+
             fetch(
               MOBILITY_API_URL,
               { signal }
             )
+
           ]);
 
+
+          // -------------------------------------------
+          // STORE API ERROR
+          // -------------------------------------------
 
           if (
             !storeResponse.ok
@@ -186,31 +279,42 @@ function StoresDetails() {
             if (
               storeResponse.status === 503
             ) {
-
               throw new Error(
-                "The Store API is temporarily unavailable. " +
-                "The backend or Snowflake connection may not be ready."
+                "The Store API is temporarily unavailable. Please check that the backend and Snowflake connection are running."
               );
-
             }
 
             throw new Error(
               `Store API request failed: HTTP ${storeResponse.status}`
             );
-
           }
 
+
+          // -------------------------------------------
+          // MOBILITY API ERROR
+          // -------------------------------------------
 
           if (
             !mobilityResponse.ok
           ) {
 
+            if (
+              mobilityResponse.status === 503
+            ) {
+              throw new Error(
+                "The Mobility API is temporarily unavailable. Please check that the backend is running."
+              );
+            }
+
             throw new Error(
               `Mobility API request failed: HTTP ${mobilityResponse.status}`
             );
-
           }
 
+
+          // -------------------------------------------
+          // PARSE JSON
+          // -------------------------------------------
 
           const storeData =
             await storeResponse.json();
@@ -219,52 +323,86 @@ function StoresDetails() {
             await mobilityResponse.json();
 
 
+          // -------------------------------------------
+          // VALIDATE STORE RESPONSE
+          // -------------------------------------------
+
           if (
             storeData.status !== "success" ||
             !Array.isArray(
               storeData.stores
             )
           ) {
-
             throw new Error(
               "Invalid response received from the Store API."
             );
-
           }
 
 
+          // -------------------------------------------
+          // VALIDATE MOBILITY RESPONSE
+          // -------------------------------------------
+
           if (
+            mobilityData.status !== "success" ||
             !Array.isArray(
               mobilityData.points
             )
           ) {
-
             throw new Error(
               "Invalid response received from the Mobility API."
             );
-
           }
 
 
+          // -------------------------------------------
+          // FIND SELECTED STORE
+          // -------------------------------------------
+
           const foundStore =
             storeData.stores.find(
-              (item) =>
-                String(
-                  item.store_id
-                ) === String(storeId)
+              (item) => {
+
+                if (
+                  item?.store_id ===
+                  undefined ||
+                  item?.store_id ===
+                  null
+                ) {
+                  return false;
+                }
+
+                return (
+                  String(
+                    item.store_id
+                  ).trim() ===
+                  String(
+                    normalizedStoreId
+                  ).trim()
+                );
+
+              }
             );
 
+
+          // -------------------------------------------
+          // STORE NOT FOUND
+          // -------------------------------------------
 
           if (!foundStore) {
 
             throw new Error(
-              "Store not found."
+              `Store "${normalizedStoreId}" was not found in the Store API response.`
             );
-
           }
 
 
+          // -------------------------------------------
+          // SAVE STORE
+          // -------------------------------------------
+
           setStore({
+
             store_id:
               foundStore.store_id,
 
@@ -277,8 +415,13 @@ function StoresDetails() {
 
             longitude:
               foundStore.longitude
+
           });
 
+
+          // -------------------------------------------
+          // VALIDATE MOBILITY POINTS
+          // -------------------------------------------
 
           const validMobilityPoints =
             mobilityData.points.filter(
@@ -286,25 +429,30 @@ function StoresDetails() {
 
                 const latitude =
                   Number(
-                    point.latitude
+                    point?.latitude
                   );
 
                 const longitude =
                   Number(
-                    point.longitude
+                    point?.longitude
                   );
 
                 return (
+
                   Number.isFinite(
                     latitude
                   ) &&
+
                   Number.isFinite(
                     longitude
                   ) &&
+
                   latitude >= -90 &&
                   latitude <= 90 &&
+
                   longitude >= -180 &&
                   longitude <= 180
+
                 );
 
               }
@@ -315,58 +463,104 @@ function StoresDetails() {
             validMobilityPoints
           );
 
-        } catch (err) {
+        }
+
+        catch (err) {
+
+          // -----------------------------------------
+          // IGNORE ABORTED REQUEST
+          // -----------------------------------------
 
           if (
-            err.name === "AbortError"
+            err?.name ===
+            "AbortError"
           ) {
             return;
           }
+
 
           console.error(
             "Store Details Error:",
             err
           );
 
-          setError(
+
+          // -----------------------------------------
+          // CONNECTION ERROR
+          // -----------------------------------------
+
+          if (
             err instanceof TypeError
-              ? "Cannot connect to the backend APIs. " +
-                "Check that the backend is running and reachable."
-              : err.message
-          );
+          ) {
+
+            setError(
+              `Unable to connect to the GeoPulse backend at ${API_BASE_URL}. Please check that the backend and Cloudflare Tunnel are running.`
+            );
+
+          }
+
+          else {
+
+            setError(
+              err?.message ||
+              "Unable to load store details."
+            );
+
+          }
+
 
           setStore(null);
           setMobilityPoints([]);
 
-        } finally {
+        }
+
+        finally {
 
           if (
             !signal?.aborted
           ) {
-
             setLoading(false);
-
           }
 
         }
 
       },
-      [storeId]
+      [
+        normalizedStoreId
+      ]
     );
 
 
-  // Load details
+  // ===================================================
+  // INITIAL LOAD
+  // ===================================================
+
   useEffect(() => {
 
     const controller =
       new AbortController();
 
+    requestControllerRef.current =
+      controller;
+
+
     fetchStoreDetails(
       controller.signal
     );
 
+
     return () => {
+
       controller.abort();
+
+      if (
+        requestControllerRef.current ===
+        controller
+      ) {
+        requestControllerRef.current =
+          null;
+      }
+
     };
 
   }, [
@@ -374,7 +568,38 @@ function StoresDetails() {
   ]);
 
 
-  // Valid store coordinates
+  // ===================================================
+  // RETRY
+  // ===================================================
+
+  const handleRetry =
+    () => {
+
+      if (
+        requestControllerRef.current
+      ) {
+        requestControllerRef.current.abort();
+      }
+
+
+      const controller =
+        new AbortController();
+
+      requestControllerRef.current =
+        controller;
+
+
+      fetchStoreDetails(
+        controller.signal
+      );
+
+    };
+
+
+  // ===================================================
+  // STORE COORDINATES
+  // ===================================================
+
   const storeCoordinates =
     useMemo(() => {
 
@@ -383,23 +608,34 @@ function StoresDetails() {
       }
 
       const latitude =
-        Number(store.latitude);
+        Number(
+          store.latitude
+        );
 
       const longitude =
-        Number(store.longitude);
+        Number(
+          store.longitude
+        );
+
 
       if (
-        !Number.isFinite(latitude) ||
-        !Number.isFinite(longitude) ||
+        !Number.isFinite(
+          latitude
+        ) ||
+
+        !Number.isFinite(
+          longitude
+        ) ||
+
         latitude < -90 ||
         latitude > 90 ||
+
         longitude < -180 ||
         longitude > 180
       ) {
-
         return null;
-
       }
+
 
       return {
         latitude,
@@ -409,24 +645,34 @@ function StoresDetails() {
     }, [store]);
 
 
-  // Mobility points within 500 meters
+  // ===================================================
+  // NEARBY MOBILITY POINTS
+  // ===================================================
+
   const nearbyPoints =
     useMemo(() => {
 
-      if (!storeCoordinates) {
+      if (
+        !storeCoordinates
+      ) {
         return [];
       }
+
 
       return mobilityPoints.filter(
         (point) => {
 
           const distance =
             calculateDistanceMeters(
+
               storeCoordinates.latitude,
               storeCoordinates.longitude,
+
               point.latitude,
               point.longitude
+
             );
+
 
           return (
             distance !== null &&
@@ -443,25 +689,37 @@ function StoresDetails() {
     ]);
 
 
+  // ===================================================
+  // FORMAT COORDINATES
+  // ===================================================
+
   const formatCoordinate =
     (value) => {
 
       const number =
         Number(value);
 
-      return Number.isFinite(number)
+      return Number.isFinite(
+        number
+      )
         ? number.toFixed(6)
         : "N/A";
 
     };
 
 
+  // ===================================================
+  // RENDER
+  // ===================================================
+
   return (
 
     <div className="store-details-page">
 
 
-      {/* Page Header */}
+      {/* ============================================
+          PAGE HEADER
+      ============================================= */}
 
       <div className="page-intro">
 
@@ -491,7 +749,9 @@ function StoresDetails() {
       </div>
 
 
-      {/* Loading */}
+      {/* ============================================
+          LOADING
+      ============================================= */}
 
       {loading && (
 
@@ -511,7 +771,9 @@ function StoresDetails() {
       )}
 
 
-      {/* Error */}
+      {/* ============================================
+          ERROR
+      ============================================= */}
 
       {!loading &&
         error && (
@@ -522,43 +784,47 @@ function StoresDetails() {
               Store Details Error
             </strong>
 
+
             <p>
               {error}
             </p>
 
 
-            <button
-              className="store-view-button"
-              onClick={() => {
-
-                const controller =
-                  new AbortController();
-
-                fetchStoreDetails(
-                  controller.signal
-                );
-
+            <div
+              style={{
+                display: "flex",
+                gap: "10px",
+                flexWrap: "wrap"
               }}
             >
-              Try Again
-            </button>
+
+              <button
+                className="store-view-button"
+                onClick={handleRetry}
+              >
+                Try Again
+              </button>
 
 
-            <button
-              className="store-view-button store-back-button"
-              onClick={() =>
-                navigate("/stores")
-              }
-            >
-              Back to Stores
-            </button>
+              <button
+                className="store-view-button store-back-button"
+                onClick={() =>
+                  navigate("/stores")
+                }
+              >
+                Back to Stores
+              </button>
+
+            </div>
 
           </div>
 
-        )}
+      )}
 
 
-      {/* Store Details */}
+      {/* ============================================
+          STORE DETAILS
+      ============================================= */}
 
       {!loading &&
         !error &&
@@ -567,7 +833,9 @@ function StoresDetails() {
           <>
 
 
-            {/* Store Information */}
+            {/* ======================================
+                STORE INFORMATION
+            ======================================= */}
 
             <div className="store-details-panel">
 
@@ -688,7 +956,9 @@ function StoresDetails() {
             </div>
 
 
-            {/* Store Map */}
+            {/* ======================================
+                STORE MAP
+            ======================================= */}
 
             <div className="store-details-panel">
 
@@ -715,57 +985,79 @@ function StoresDetails() {
                 <div className="store-details-map">
 
                   <MapContainer
+
                     center={[
                       storeCoordinates.latitude,
                       storeCoordinates.longitude
                     ]}
+
                     zoom={15}
+
                     scrollWheelZoom={true}
+
                     className="store-detail-leaflet-map"
+
                   >
 
                     <MapCenter
+
                       latitude={
                         storeCoordinates.latitude
                       }
+
                       longitude={
                         storeCoordinates.longitude
                       }
+
                     />
 
 
                     <TileLayer
-                      attribution='&copy; OpenStreetMap contributors'
+
+                      attribution="&copy; OpenStreetMap contributors"
+
                       url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+
                     />
 
 
-                    {/* Store radius */}
+                    {/* ==================================
+                        500M RADIUS
+                    =================================== */}
 
                     <Circle
+
                       center={[
                         storeCoordinates.latitude,
                         storeCoordinates.longitude
                       ]}
+
                       radius={
                         ACTIVITY_RADIUS_METERS
                       }
+
                       pathOptions={{
                         color: "#2563eb",
                         fillColor: "#2563eb",
                         fillOpacity: 0.08
                       }}
+
                     />
 
 
-                    {/* Store marker */}
+                    {/* ==================================
+                        STORE MARKER
+                    =================================== */}
 
                     <Marker
+
                       position={[
                         storeCoordinates.latitude,
                         storeCoordinates.longitude
                       ]}
+
                       icon={defaultIcon}
+
                     >
 
                       <Popup>
@@ -789,15 +1081,19 @@ function StoresDetails() {
                     </Marker>
 
 
-                    {/* Nearby mobility points */}
+                    {/* ==================================
+                        NEARBY MOBILITY POINTS
+                    =================================== */}
 
                     {nearbyPoints.map(
                       (point, index) => (
 
                         <Circle
+
                           key={
-                            `${point.device_id}-${point.timestamp}-${index}`
+                            `${point.device_id || "device"}-${point.timestamp || "time"}-${index}`
                           }
+
                           center={[
                             Number(
                               point.latitude
@@ -806,12 +1102,15 @@ function StoresDetails() {
                               point.longitude
                             )
                           ]}
+
                           radius={5}
+
                           pathOptions={{
                             color: "#64748b",
                             fillColor: "#64748b",
                             fillOpacity: 0.7
                           }}
+
                         />
 
                       )
@@ -842,7 +1141,9 @@ function StoresDetails() {
             </div>
 
 
-            {/* Mobility Summary */}
+            {/* ======================================
+                MOBILITY SUMMARY
+            ======================================= */}
 
             <div className="mobility-stats">
 
@@ -932,8 +1233,8 @@ function StoresDetails() {
 
               </div>
 
-            </div>
 
+            </div>
 
           </>
 

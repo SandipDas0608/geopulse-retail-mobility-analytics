@@ -1,5 +1,10 @@
 import API_BASE_URL from "../services/api";
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState
+} from "react";
 
 import {
   ResponsiveContainer,
@@ -11,89 +16,93 @@ import {
   Tooltip
 } from "recharts";
 
-
 const API_URL =
   `${API_BASE_URL}/mobility/points?limit=1000`;
 
-
 function Analytics() {
-
   const [points, setPoints] = useState([]);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [error, setError] =
-    useState("");
-
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   // Fetch real mobility data
-  const fetchMobilityData = async () => {
+  const fetchMobilityData = useCallback(
+    async (signal) => {
+      try {
+        setLoading(true);
+        setError("");
 
-    try {
+        const response = await fetch(API_URL, {
+          signal
+        });
 
-      setLoading(true);
+        if (!response.ok) {
+          if (response.status === 503) {
+            throw new Error(
+              "The mobility service is temporarily unavailable. Please try again later."
+            );
+          }
 
-      setError("");
+          throw new Error(
+            `API request failed with status ${response.status}.`
+          );
+        }
 
+        const data = await response.json();
 
-      const response =
-        await fetch(API_URL);
+        if (!Array.isArray(data.points)) {
+          throw new Error(
+            "Invalid API response: points array not found."
+          );
+        }
 
+        setPoints(data.points);
+      } catch (err) {
+        // Ignore cancelled requests
+        if (err.name === "AbortError") {
+          return;
+        }
 
-      if (!response.ok) {
-
-        throw new Error(
-          `API request failed with status ${response.status}`
+        console.error(
+          "Footfall Visualization API Error:",
+          err
         );
 
+        if (err instanceof TypeError) {
+          setError(
+            `Unable to connect to the GeoPulse backend at ${API_BASE_URL}. Please check whether the backend is running and reachable.`
+          );
+        } else {
+          setError(
+            err.message ||
+              "Unable to load mobility activity data."
+          );
+        }
+
+        setPoints([]);
+      } finally {
+        if (!signal?.aborted) {
+          setLoading(false);
+        }
       }
-
-
-      const data =
-        await response.json();
-
-
-      if (!Array.isArray(data.points)) {
-
-        throw new Error(
-          "Invalid API response: points array not found."
-        );
-
-      }
-
-
-      setPoints(data.points);
-
-    } catch (err) {
-
-      console.error(
-        "Footfall Visualization API Error:",
-        err
-      );
-
-      setError(
-        "Unable to load mobility activity data."
-      );
-
-      setPoints([]);
-
-    } finally {
-
-      setLoading(false);
-
-    }
-
-  };
-
+    },
+    []
+  );
 
   // Load data when page opens
   useEffect(() => {
+    const controller = new AbortController();
 
+    fetchMobilityData(controller.signal);
+
+    return () => {
+      controller.abort();
+    };
+  }, [fetchMobilityData]);
+
+  // Refresh Analytics
+  const handleRefresh = () => {
     fetchMobilityData();
-
-  }, []);
-
+  };
 
   /*
    * Group GPS points by hour.
@@ -104,45 +113,32 @@ function Analytics() {
    * 10:00 → 184 pings
    * 11:00 → 210 pings
    */
-
   const hourlyData = useMemo(() => {
-
     const hourlyCounts = {};
 
-
     points.forEach((point) => {
-
       if (!point.timestamp) {
         return;
       }
 
-
       const date =
         new Date(point.timestamp);
 
-
       if (
-        Number.isNaN(
-          date.getTime()
-        )
+        Number.isNaN(date.getTime())
       ) {
         return;
       }
 
-
       const hour =
         date.getHours();
-
 
       const label =
         `${String(hour).padStart(2, "0")}:00`;
 
-
       hourlyCounts[label] =
         (hourlyCounts[label] || 0) + 1;
-
     });
-
 
     return Object.entries(
       hourlyCounts
@@ -157,19 +153,15 @@ function Analytics() {
         (a, b) =>
           a.hour.localeCompare(b.hour)
       );
-
   }, [points]);
-
 
   // Peak activity hour
   const peakActivity = useMemo(() => {
-
     if (
       hourlyData.length === 0
     ) {
       return null;
     }
-
 
     return hourlyData.reduce(
       (highest, current) =>
@@ -178,19 +170,15 @@ function Analytics() {
           ? current
           : highest
     );
-
   }, [hourlyData]);
-
 
   // Average activity
   const averageActivity = useMemo(() => {
-
     if (
       hourlyData.length === 0
     ) {
       return 0;
     }
-
 
     const total =
       hourlyData.reduce(
@@ -199,18 +187,13 @@ function Analytics() {
         0
       );
 
-
     return Math.round(
       total / hourlyData.length
     );
-
   }, [hourlyData]);
 
-
   return (
-
     <div className="analytics-page">
-
 
       {/* Page Introduction */}
 
@@ -229,17 +212,14 @@ function Analytics() {
 
         </div>
 
-
         <button
           className="map-button"
-          onClick={fetchMobilityData}
+          onClick={handleRefresh}
           disabled={loading}
         >
-
           {loading
             ? "Loading..."
             : "Refresh Analytics"}
-
         </button>
 
       </div>
@@ -248,7 +228,6 @@ function Analytics() {
       {/* Analytics Summary */}
 
       <div className="mobility-stats">
-
 
         {/* Total GPS Pings */}
 
@@ -265,11 +244,9 @@ function Analytics() {
             </p>
 
             <h3>
-
               {loading
                 ? "--"
                 : points.length}
-
             </h3>
 
           </div>
@@ -292,13 +269,11 @@ function Analytics() {
             </p>
 
             <h3>
-
               {loading
                 ? "--"
                 : peakActivity
                 ? peakActivity.hour
                 : "--"}
-
             </h3>
 
           </div>
@@ -321,13 +296,11 @@ function Analytics() {
             </p>
 
             <h3>
-
               {loading
                 ? "--"
                 : peakActivity
                 ? peakActivity.pings
                 : "--"}
-
             </h3>
 
           </div>
@@ -350,11 +323,9 @@ function Analytics() {
             </p>
 
             <h3>
-
               {loading
                 ? "--"
                 : averageActivity}
-
             </h3>
 
           </div>
@@ -383,7 +354,7 @@ function Analytics() {
 
             <button
               className="store-view-button"
-              onClick={fetchMobilityData}
+              onClick={handleRefresh}
             >
               Try Again
             </button>
@@ -434,6 +405,13 @@ function Analytics() {
               returned by the backend.
             </p>
 
+            <button
+              className="store-view-button"
+              onClick={handleRefresh}
+            >
+              Refresh Data
+            </button>
+
           </div>
 
         )}
@@ -448,7 +426,6 @@ function Analytics() {
           <div
             className="analytics-chart-card"
           >
-
 
             <div
               className="analytics-chart-header"
@@ -466,7 +443,6 @@ function Analytics() {
                 </p>
 
               </div>
-
 
               <span className="analytics-live">
                 Live API Data
@@ -547,12 +523,8 @@ function Analytics() {
 
       </div>
 
-
     </div>
-
   );
-
 }
-
 
 export default Analytics;

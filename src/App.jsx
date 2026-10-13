@@ -1,111 +1,200 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-
-import Sidebar from "./components/Sidebar";
-import Header from "./components/Header";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate
+} from "react-router-dom";
 
 import Dashboard from "./pages/Dashboard";
 import MobilityMap from "./pages/MobilityMap";
 import Stores from "./pages/Stores";
 import Analytics from "./pages/Analytics";
 import Cannibalization from "./pages/Cannibalization";
-import StoreDetails from "./pages/StoresDetails";
+import StoresDetails from "./pages/StoresDetails";
 import Settings from "./pages/Settings";
+
+import Sidebar from "./components/Sidebar";
+import Header from "./components/Header";
 
 import "./App.css";
 
-function AppLayout({ children, title }) {
+
+// =====================================================
+// APP LAYOUT
+// =====================================================
+
+function AppLayout({ children }) {
   return (
     <div className="app-container">
+
       <Sidebar />
 
-      <main className="main-content">
-        <Header title={title} />
+      <div className="main-content">
+
+        <Header />
+
         {children}
-      </main>
+
+      </div>
+
     </div>
   );
 }
 
+
+// =====================================================
+// APP
+// =====================================================
+
 function App() {
   return (
     <BrowserRouter>
+
       <Routes>
+
+        {/* ==========================================
+            DASHBOARD
+        =========================================== */}
 
         <Route
           path="/"
           element={
-            <AppLayout title="Dashboard">
-              <Dashboard />
-            </AppLayout>
+            <Navigate
+              to="/dashboard"
+              replace
+            />
           }
         />
 
         <Route
           path="/dashboard"
           element={
-            <AppLayout title="Dashboard">
+            <AppLayout>
               <Dashboard />
             </AppLayout>
           }
         />
 
+
+        {/* ==========================================
+            MOBILITY MAP
+        =========================================== */}
+
         <Route
           path="/mobility-map"
           element={
-            <AppLayout title="Mobility Map">
+            <AppLayout>
               <MobilityMap />
             </AppLayout>
           }
         />
 
+
+        {/* ==========================================
+            STORES
+        =========================================== */}
+
         <Route
           path="/stores"
           element={
-            <AppLayout title="Stores">
+            <AppLayout>
               <Stores />
             </AppLayout>
           }
         />
 
+
+        {/* ==========================================
+            ANALYTICS
+        =========================================== */}
+
         <Route
           path="/analytics"
           element={
-            <AppLayout title="Analytics">
+            <AppLayout>
               <Analytics />
             </AppLayout>
           }
         />
 
+
+        {/* ==========================================
+            CANNIBALIZATION
+        =========================================== */}
+
         <Route
           path="/cannibalization"
           element={
-            <AppLayout title="Cannibalization Analysis">
+            <AppLayout>
               <Cannibalization />
             </AppLayout>
           }
         />
 
+
+        {/* ==========================================
+            STORE DETAILS WITHOUT ID
+            → BACK TO STORES
+        =========================================== */}
+
         <Route
           path="/store-details"
           element={
-            <AppLayout title="Store Details">
-              <StoreDetails />
+            <Navigate
+              to="/stores"
+              replace
+            />
+          }
+        />
+
+
+        {/* ==========================================
+            STORE DETAILS WITH STORE ID
+        =========================================== */}
+
+        <Route
+          path="/store-details/:storeId"
+          element={
+            <AppLayout>
+              <StoresDetails />
             </AppLayout>
           }
         />
 
+
+        {/* ==========================================
+            SETTINGS
+        =========================================== */}
+
         <Route
           path="/settings"
           element={
-            <AppLayout title="Settings">
+            <AppLayout>
               <Settings />
             </AppLayout>
           }
         />
 
+
+        {/* ==========================================
+            UNKNOWN ROUTE
+        =========================================== */}
+
+        <Route
+          path="*"
+          element={
+            <Navigate
+              to="/dashboard"
+              replace
+            />
+          }
+        />
+
       </Routes>
+
     </BrowserRouter>
   );
 }
+
 
 export default App;
