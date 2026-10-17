@@ -1,5 +1,5 @@
 import API_BASE_URL from "../services/api";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ResponsiveContainer,
   BarChart,
@@ -108,6 +108,15 @@ function Cannibalization() {
 
   const [selectedPair, setSelectedPair] =
     useState(null);
+    const selectedPairRef = useRef(null);
+    useEffect(() => {
+  if (selectedPair && selectedPairRef.current) {
+    selectedPairRef.current.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+  }
+}, [selectedPair]);
 
 
   // Fetch stores
@@ -387,16 +396,11 @@ setSelectedPair(null);
             stores:
               `${pair.storeAName} ↔ ${pair.storeBName}`,
 
-            distance:
-              Number(
-                (
-                  pair.distance / 1000
-                ).toFixed(2)
-              ),
-
             sharedVisitors:
-  pair.sharedVisitors
+  pair.sharedVisitors,
 
+cannibalizationPercentage:
+  pair.cannibalizationPercentage
           })
         );
 
@@ -493,7 +497,7 @@ setSelectedPair(null);
           <div>
 
             <p>
-              Nearby Store Pairs
+              Analyzed Store Pairs
             </p>
 
             <h3>
@@ -516,12 +520,17 @@ setSelectedPair(null);
           <div>
 
             <p>
-              Analysis Radius
-            </p>
+  Total Shared Visitors
+</p>
 
-            <h3>
-              1 km
-            </h3>
+<h3>
+  {loading || error
+    ? "--"
+    : storePairs.reduce(
+        (total, pair) => total + pair.sharedVisitors,
+        0
+      )}
+</h3>
 
           </div>
 
@@ -570,9 +579,9 @@ setSelectedPair(null);
                 </h3>
 
                 <p>
-                  Distance and shared visitor overlap
-                  for nearby store relationships.
-                </p>
+  Shared visitor overlap between store pairs
+  based on Snowflake cannibalization analytics.
+</p>
 
               </div>
 
@@ -607,26 +616,13 @@ setSelectedPair(null);
                   <YAxis />
 
                   <Tooltip
-                    formatter={(
-                      value,
-                      name
-                    ) => {
+                    formatter={(value, name) => {
+  if (name === "Shared Visitors") {
+    return [value, "Shared Visitors"];
+  }
 
-                      if (
-                        name === "distance"
-                      ) {
-                        return [
-                          `${value} km`,
-                          "Distance"
-                        ];
-                      }
-
-                      return [
-  value,
-  "Shared Visitors"
-];
-
-                    }}
+  return [value, name];
+}}
                     labelFormatter={(
                       label
                     ) => {
@@ -677,13 +673,14 @@ setSelectedPair(null);
           <div>
 
             <h3>
-              Nearby Store Relationships
-            </h3>
+  Store Cannibalization Analysis
+</h3>
 
-            <p>
-              Store pairs within the 1 kilometer
-              geographic analysis radius.
-            </p>
+<p>
+  Store pairs analyzed using shared visitor
+  counts and cannibalization percentages
+  from Snowflake.
+</p>
 
           </div>
 
@@ -792,13 +789,13 @@ setSelectedPair(null);
             <div className="store-message">
 
               <h3>
-                No Nearby Store Pairs
-              </h3>
+  No Cannibalization Data Available
+</h3>
 
-              <p>
-                No stores were found within
-                the 1 kilometer radius.
-              </p>
+<p>
+  No store-pair cannibalization records
+  were returned by the Snowflake API.
+</p>
 
             </div>
 
@@ -860,7 +857,7 @@ setSelectedPair(null);
                     </th>
 
                     <th>
-                      Distance
+                      Cannibalization %
                     </th>
 
                     <th>
@@ -914,14 +911,10 @@ setSelectedPair(null);
 
 
                         <td>
-
-                          <strong>
-                            {formatDistance(
-                              pair.distance
-                            )}
-                          </strong>
-
-                        </td>
+  <strong>
+    {pair.cannibalizationPercentage.toFixed(2)}%
+  </strong>
+</td>
 
 
                         <td>
@@ -976,7 +969,10 @@ setSelectedPair(null);
 
       {selectedPair && (
 
-        <div className="store-details-panel">
+        <div
+  ref={selectedPairRef}
+  className="store-details-panel"
+>
 
           <div className="store-details-header">
 
@@ -1035,18 +1031,14 @@ setSelectedPair(null);
 
 
             <div>
+  <span>
+    Cannibalization %
+  </span>
 
-              <span>
-                Distance
-              </span>
-
-              <strong>
-                {formatDistance(
-                  selectedPair.distance
-                )}
-              </strong>
-
-            </div>
+  <strong>
+    {selectedPair.cannibalizationPercentage.toFixed(2)}%
+  </strong>
+</div>
 
 
             <div>
