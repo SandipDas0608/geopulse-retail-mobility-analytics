@@ -7,13 +7,13 @@ function Header({ title = "Dashboard" }) {
       </div>
 
       <div className="user-profile">
-        <div className="user-avatar">NS</div>
+  <div className="user-avatar">GP</div>
 
-        <div className="user-info">
-          <strong>Nikhil Shinde</strong>
-          <span>Frontend Analyst</span>
-        </div>
-      </div>
+  <div className="user-info">
+    <strong>GeoPulse</strong>
+    <span>Retail Mobility Analytics</span>
+  </div>
+</div>
     </header>
   );
 }
