@@ -27,11 +27,7 @@ function Sidebar() {
       path: "/cannibalization",
       icon: "◎",
     },
-    {
-  name: "Store Details",
-  path: "/stores",
-  icon: "◉",
-    },
+    
     {
       name: "Settings",
       path: "/settings",
