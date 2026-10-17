@@ -28,9 +28,9 @@ function Sidebar() {
       icon: "◎",
     },
     {
-      name: "Store Details",
-      path: "/store-details",
-      icon: "◉",
+  name: "Store Details",
+  path: "/stores",
+  icon: "◉",
     },
     {
       name: "Settings",

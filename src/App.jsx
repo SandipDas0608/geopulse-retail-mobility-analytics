@@ -86,7 +86,7 @@ function App() {
         />
 
         <Route
-          path="/store-details"
+          path="/store-details/:storeId"
           element={
             <AppLayout title="Store Details">
               <StoreDetails />
