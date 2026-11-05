@@ -15,7 +15,9 @@ from services.snowflake_service import (
     get_snowflake_stores,
     get_snowflake_hourly_footfall,
     get_snowflake_cannibalization,
-
+    get_backup_stores,
+    get_backup_cannibalization,
+    get_backup_hourly_footfall,
 )
 
 
@@ -67,60 +69,69 @@ def snowflake_mobility_points(limit: int = 1000):
 
 
 @router.get("/stores")
-def snowflake_stores(limit: int = 100):
+def snowflake_stores(limit: int = Query(default=100, ge=1, le=1000)):
     try:
         stores = get_snowflake_stores(limit)
+        source = "snowflake"
 
-        return {
-            "status": "success",
-            "source": "snowflake",
-            "count": len(stores),
-            "stores": stores,
-        }
+    except Exception:
+        stores = get_backup_stores(limit)
+        source = "backup_csv"
 
-    except Exception as error:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Snowflake store data unavailable: {str(error)}"
-        )
+    return {
+        "status": "success",
+        "source": source,
+        "count": len(stores),
+        "stores": stores,
+    }
 
 
 @router.get("/cannibalization")
 def snowflake_cannibalization():
     try:
         pairs = get_snowflake_cannibalization()
-
-        return {
-            "status": "success",
-            "source": "snowflake",
-            "count": len(pairs),
-            "pairs": pairs,
-        }
+        source = "snowflake"
 
     except Exception:
-        raise HTTPException(
-            status_code=503,
-            detail="Snowflake cannibalization data unavailable"
-        )
+        try:
+            pairs = get_backup_cannibalization()
+            source = "backup_csv"
 
+        except Exception:
+            raise HTTPException(
+                status_code=503,
+                detail="Snowflake and CSV backup cannibalization data unavailable",
+            )
+
+    return {
+        "status": "success",
+        "source": source,
+        "count": len(pairs),
+        "pairs": pairs,
+    }
 
 @router.get("/hourly-footfall")
 def snowflake_hourly_footfall(
-    limit: int = Query(default=24, ge=1, le=100),
+    limit: int = Query(default=24, ge=1, le=100)
 ):
     try:
-        records = get_snowflake_hourly_footfall(limit=limit)
-
-        return {
-            "status": "success",
-            "source": "snowflake",
-            "count": len(records),
-            "data": records,
-        }
+        data = get_snowflake_hourly_footfall(limit)
+        source = "snowflake"
 
     except Exception:
-        raise HTTPException(
-            status_code=503,
-            detail="Snowflake hourly footfall data unavailable"
-        )
-    
+        try:
+            data = get_backup_hourly_footfall(limit)
+            source = "backup_csv"
+
+        except Exception:
+            raise HTTPException(
+                status_code=503,
+                detail="Snowflake and CSV backup hourly footfall data unavailable",
+            )
+
+    return {
+        "status": "success",
+        "source": source,
+        "count": len(data),
+        "data": data,
+    }

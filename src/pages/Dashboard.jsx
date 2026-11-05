@@ -66,125 +66,130 @@ function Dashboard() {
 
   const [error, setError] =
     useState("");
+  const [storeError, setStoreError] =
+  useState("");
 
-  const fetchDashboardData =
-    useCallback(async () => {
-      try {
-        setLoading(true);
-        setError("");
+const fetchDashboardData =
+  useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
+      setStoreError("");
 
-        const [
-          mobilityResponse,
-          storesResponse
-        ] = await Promise.all([
-          fetch(MOBILITY_API_URL),
-          fetch(STORE_API_URL)
+      const [mobilityResult, storesResult] =
+        await Promise.allSettled([
+          (async () => {
+            const response =
+              await fetch(MOBILITY_API_URL);
+
+            if (!response.ok) {
+              throw new Error(
+                `Mobility API error: ${response.status}`
+              );
+            }
+
+            const data =
+              await response.json();
+
+            if (
+              data.status !== "success" ||
+              !Array.isArray(data.points)
+            ) {
+              throw new Error(
+                "Invalid mobility API response."
+              );
+            }
+
+            return data.points
+              .filter(
+                (point) =>
+                  Number.isFinite(
+                    Number(point.latitude)
+                  ) &&
+                  Number.isFinite(
+                    Number(point.longitude)
+                  )
+              )
+              .map((point) => ({
+                ...point,
+                latitude: Number(point.latitude),
+                longitude: Number(point.longitude)
+              }));
+          })(),
+
+          (async () => {
+            const response =
+              await fetch(STORE_API_URL);
+
+            if (!response.ok) {
+              throw new Error(
+                response.status === 503
+                  ? "Snowflake data is currently unavailable."
+                  : `Store API error: ${response.status}`
+              );
+            }
+
+            const data =
+              await response.json();
+
+            if (
+              data.status !== "success" ||
+              !Array.isArray(data.stores)
+            ) {
+              throw new Error(
+                "Invalid store API response."
+              );
+            }
+
+            return data.stores
+              .filter(
+                (store) =>
+                  Number.isFinite(
+                    Number(store.latitude)
+                  ) &&
+                  Number.isFinite(
+                    Number(store.longitude)
+                  )
+              )
+              .map((store) => ({
+                ...store,
+                latitude: Number(store.latitude),
+                longitude: Number(store.longitude)
+              }));
+          })()
         ]);
 
-        if (!mobilityResponse.ok) {
-          throw new Error(
-            `Mobility API error: ${mobilityResponse.status}`
-          );
-        }
-
-        if (!storesResponse.ok) {
-          if (
-            storesResponse.status === 503
-          ) {
-            throw new Error(
-              "Store API is unavailable. Snowflake data is currently not configured."
-            );
-          }
-
-          throw new Error(
-            `Store API error: ${storesResponse.status}`
-          );
-        }
-
-        const mobilityData =
-          await mobilityResponse.json();
-
-        const storesData =
-          await storesResponse.json();
-
-        if (
-          mobilityData.status !==
-            "success" ||
-          !Array.isArray(
-            mobilityData.points
-          )
-        ) {
-          throw new Error(
-            "Invalid mobility API response."
-          );
-        }
-
-        if (
-          storesData.status !==
-            "success" ||
-          !Array.isArray(
-            storesData.stores
-          )
-        ) {
-          throw new Error(
-            "Invalid store API response."
-          );
-        }
-
-        const validPoints =
-          mobilityData.points.filter(
-            (point) =>
-              Number.isFinite(
-                Number(point.latitude)
-              ) &&
-              Number.isFinite(
-                Number(point.longitude)
-              )
-          );
-
-        const validStores =
-          storesData.stores.filter(
-            (store) =>
-              Number.isFinite(
-                Number(store.latitude)
-              ) &&
-              Number.isFinite(
-                Number(store.longitude)
-              )
-          );
-
-        setPoints(
-          validPoints.map((point) => ({
-            ...point,
-            latitude: Number(
-              point.latitude
-            ),
-            longitude: Number(
-              point.longitude
-            )
-          }))
-        );
-
-        setStores(
-          validStores.map((store) => ({
-            ...store,
-            latitude: Number(
-              store.latitude
-            ),
-            longitude: Number(
-              store.longitude
-            )
-          }))
-        );
-      } catch (err) {
-        setError(
-          err.message ||
-            "Failed to load dashboard data."
-        );
-      } finally {
-        setLoading(false);
+      if (
+        mobilityResult.status === "rejected"
+      ) {
+        throw mobilityResult.reason;
       }
-    }, []);
+
+      setPoints(mobilityResult.value);
+
+      if (
+        storesResult.status === "fulfilled"
+      ) {
+        setStores(storesResult.value);
+      } else {
+        setStores([]);
+        setStoreError(
+          storesResult.reason?.message ||
+            "Store data is currently unavailable."
+        );
+      }
+
+    } catch (err) {
+      setError(
+        err.message ||
+          "Failed to load mobility data."
+      );
+      setPoints([]);
+      setStores([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchDashboardData();
@@ -232,14 +237,6 @@ function Dashboard() {
 
   const activeStores =
     stores.length;
-
-  const totalNearbyActivity =
-    storeActivity.reduce(
-      (total, store) =>
-        total +
-        store.nearbyActivity,
-      0
-    );
 
   const highActivityStores =
     storeActivity.filter(
@@ -342,10 +339,12 @@ function Dashboard() {
           </span>
 
           <strong>
-            {loading
-              ? "..."
-              : activeStores}
-          </strong>
+  {loading
+    ? "..."
+    : storeError
+      ? "Unavailable"
+      : activeStores}
+</strong>
 
           <small>
             Store locations
@@ -358,11 +357,12 @@ function Dashboard() {
           </span>
 
           <strong>
-            {loading
-              ? "..."
-              : totalNearbyActivity}
-          </strong>
-
+  {loading
+    ? "..."
+    : storeError
+      ? "Unavailable"
+      : highActivityStores}
+</strong>
           <small>
             Within 500m of stores
           </small>
@@ -405,15 +405,18 @@ function Dashboard() {
           </div>
 
           {loading ? (
-            <div className="dashboard-empty">
-              Loading store activity...
-            </div>
-          ) : chartData.length === 0 ? (
-            <div className="dashboard-empty">
-              No store activity data
-              available.
-            </div>
-          ) : (
+  <div className="dashboard-empty">
+    Loading store activity...
+  </div>
+) : storeError ? (
+  <div className="dashboard-empty">
+    Store activity unavailable: {storeError}
+  </div>
+) : chartData.length === 0 ? (
+  <div className="dashboard-empty">
+    No store activity data available.
+  </div>
+) : (
             <div className="dashboard-chart">
 
               <ResponsiveContainer
@@ -499,13 +502,19 @@ function Dashboard() {
                 </div>
               ))}
 
-            {!loading &&
-              storeActivity.length ===
-                0 && (
-                <div className="dashboard-empty">
-                  No stores available.
-                </div>
-              )}
+            {!loading && storeError && (
+  <div className="dashboard-empty">
+    Store list unavailable: {storeError}
+  </div>
+)}
+
+{!loading &&
+  !storeError &&
+  storeActivity.length === 0 && (
+    <div className="dashboard-empty">
+      No stores available.
+    </div>
+  )}
 
           </div>
 
@@ -539,10 +548,12 @@ function Dashboard() {
           </span>
 
           <strong>
-            {activeStores > 0
-              ? "Available"
-              : "No Data"}
-          </strong>
+  {storeError
+    ? "Unavailable"
+    : activeStores > 0
+      ? "Available"
+      : "No Data"}
+</strong>
 
           <p>
             Store locations are
@@ -557,8 +568,10 @@ function Dashboard() {
           </span>
 
           <strong>
-            500m Radius
-          </strong>
+  {storeError
+    ? "Unavailable"
+    : "500m Radius"}
+</strong>
 
           <p>
             Nearby GPS activity is

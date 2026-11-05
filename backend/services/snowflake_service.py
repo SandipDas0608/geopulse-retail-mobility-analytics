@@ -1,9 +1,36 @@
 import os
+import csv
+from pathlib import Path
 
 import snowflake.connector
 from dotenv import load_dotenv
 
 load_dotenv()
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+BACKUP_CSV_DIR = (
+    REPO_ROOT
+    / "snowflake_backup"
+    / "extracted_csv"
+    / "GeoPulse_CSV_Exports"
+)
+
+def read_backup_csv(filename):
+    """Read records from a local GeoPulse backup CSV file."""
+    file_path = BACKUP_CSV_DIR / filename
+
+    if not file_path.exists():
+        raise FileNotFoundError(
+            f"GeoPulse backup CSV not found: {filename}"
+        )
+
+    with file_path.open(
+        mode="r",
+        encoding="utf-8-sig",
+        newline=""
+    ) as csv_file:
+        reader = csv.DictReader(csv_file)
+        return list(reader)
 
 
 def get_snowflake_connection():
@@ -124,6 +151,53 @@ def get_snowflake_stores(limit=100):
     finally:
         cursor.close()
         connection.close()
+
+def get_backup_stores(limit=100):
+    """Retrieve retail store locations from the local CSV backup."""
+    limit = max(1, min(int(limit), 1000))
+
+    rows = read_backup_csv("stores_data.csv")
+
+    return [
+        {
+            "store_id": row["STORE_ID"],
+            "store_name": row["STORE_NAME"],
+            "latitude": float(row["LATITUDE"]),
+            "longitude": float(row["LONGITUDE"]),
+        }
+        for row in rows[:limit]
+    ]
+
+def get_backup_cannibalization():
+    """Retrieve cannibalization metrics from the local CSV backup."""
+    rows = read_backup_csv("cannibalization_metrics.csv")
+
+    return [
+        {
+            "existing_store_name": row["EXISTING_STORE_NAME"],
+            "new_store_name": row["NEW_STORE_NAME"],
+            "shared_visitors_count": int(row["SHARED_VISITORS_COUNT"]),
+            "total_existing_customers": int(row["TOTAL_EXISTING_CUSTOMERS"]),
+            "cannibalization_percentage": float(
+                row["CANNIBALIZATION_PERCENTAGE"]
+            ),
+        }
+        for row in rows
+    ]
+
+def get_backup_hourly_footfall(limit=24):
+    """Retrieve hourly footfall metrics from the local CSV backup."""
+    limit = max(1, min(int(limit), 100))
+
+    rows = read_backup_csv("hourly_footfall_data.csv")
+
+    return [
+        {
+            "commute_hour": int(row["COMMUTE_HOUR"]),
+            "total_visitors": int(row["TOTAL_VISITORS"]),
+        }
+        for row in rows[:limit]
+    ]
 
 def get_snowflake_footfall_visits():
     """Retrieve daily store visit records used for cannibalization analysis."""

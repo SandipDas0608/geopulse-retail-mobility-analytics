@@ -83,7 +83,7 @@ def test_cannibalization_returns_empty_result(monkeypatch):
     assert data["pairs"] == []
 
 
-def test_cannibalization_handles_snowflake_failure(monkeypatch):
+def test_cannibalization_uses_backup_when_snowflake_fails(monkeypatch):
     def raise_snowflake_error():
         raise RuntimeError("Snowflake unavailable")
 
@@ -95,7 +95,19 @@ def test_cannibalization_handles_snowflake_failure(monkeypatch):
 
     response = client.get("/snowflake/cannibalization")
 
-    assert response.status_code == 503
-    assert response.json()["detail"] == (
-        "Snowflake cannibalization data unavailable"
-    )
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert data["status"] == "success"
+    assert data["source"] == "backup_csv"
+    assert data["count"] == 8
+    assert len(data["pairs"]) == 8
+
+    first_pair = data["pairs"][0]
+
+    assert first_pair["existing_store_name"] == "GeoPulse Store 053"
+    assert first_pair["new_store_name"] == "GeoPulse Store 100"
+    assert first_pair["shared_visitors_count"] == 1
+    assert first_pair["total_existing_customers"] == 1
+    assert first_pair["cannibalization_percentage"] == 100.0
